@@ -141,6 +141,15 @@
         <option value="84">84㎡ 이상 (32평형대~)</option>
       </select>
     </label>
+    <label>최소 세대수
+      <select id="hh">
+        <option value="0">상관없음</option>
+        <option value="100">100세대 이상</option>
+        <option value="300">300세대 이상</option>
+        <option value="500">500세대 이상</option>
+        <option value="1000">1,000세대 이상</option>
+      </select>
+    </label>
     <label>출근지 (선택)
       <input id="work" list="work-list" placeholder="예: 강남역, 회사 이름" autocomplete="off" />
       <datalist id="work-list">
@@ -158,7 +167,7 @@
   <div id="result"></div>
 
   <footer>
-    데이터: 국토교통부 아파트 매매 실거래가(공공데이터포털), 카카오맵(역·마트·백화점·중학교 위치, 대중교통 경로).
+    데이터: 국토교통부 아파트 매매 실거래가·건축물대장(공공데이터포털), 카카오맵(역·마트·백화점·중학교 위치, 대중교통 경로).
     취소된 거래는 뺐어요. 출근 시간은 조회한 시각 기준이라 실제 출근 시간대와 다를 수 있어요.
     점수와 등급은 이 앱이 정한 기준으로 계산한 참고용이에요. 실제 매물·가격·학교 배정은 꼭 직접 확인하세요.
   </footer>
@@ -201,8 +210,10 @@ const CATS = [
   { k: "school",  name: "학군", desc: "가장 가까운 중학교까지 거리 (150m 만점 ~ 1km 0점)" },
   { k: "price",   name: "가격", desc: "같은 결과 안에서 평당 가격이 쌀수록 높음" },
   { k: "fresh",   name: "신축", desc: "준공 연차가 짧을수록 높음" },
+  { k: "size",    name: "규모", desc: "세대수 (1,000세대 이상 만점 ~ 100세대 0점)" },
 ];
-let weights = store.get("weights", { traffic: 3, life: 2, school: 2, price: 2, fresh: 1 });
+const W0 = { traffic: 3, life: 2, school: 2, price: 2, fresh: 1, size: 1 };
+let weights = { ...W0, ...store.get("weights", {}) };
 let gradeFilter = { traffic: 0, life: 0, school: 0 };  // 0=전체, 3=S만, 2=A이상, 1=B이상
 let guFilter = null;
 let sortBy = "score";
@@ -228,6 +239,9 @@ function scoreOf(g) {
   s.price = g.priceRank;
   // 신축: 5년차 이하 100 ~ 40년차 0
   s.fresh = lerp(year - g.built + 1, 5, 40);
+  // 규모: 건축물대장 세대수 (1,000세대 이상 100 ~ 100세대 0)
+  const b = p && p.building && p.building.households ? p.building : null;
+  s.size = b ? lerp(b.households, 1000, 100) : null;
   let sum = 0, w = 0;
   for (const c of CATS) if (s[c.k] != null && weights[c.k] > 0) { sum += s[c.k] * weights[c.k]; w += weights[c.k]; }
   // 주변 정보를 못 찾은 단지는 종합 점수를 매기지 않아요 (가격·신축만으로 높게 나오는 걸 막으려고)
@@ -250,6 +264,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 
 // ---- 검색 ----
 let runToken = 0;
+$("hh").addEventListener("change", () => groups.length && renderAll());
 $("f").addEventListener("submit", async (e) => {
   e.preventDefault();
   const token = ++runToken;
@@ -377,8 +392,11 @@ function renderList() {
     commute: (a, b) => ride(a) - ride(b),
   };
   if (!groups.length) { $("result").innerHTML = `<p class="empty">조건에 맞는 거래가 없어요. 예산이나 기간을 넓혀 보세요.</p>`; return; }
+  const minHH = +$("hh").value;
+  const hhOf = (g) => g.place?.building?.households;
   let list = groups.filter((g) =>
     (!guFilter || g.gu === guFilter) &&
+    (!minHH || hhOf(g) == null || hhOf(g) >= minHH) &&
     Object.entries(gradeFilter).every(([k, need]) => !need || gradeNum[grade(g.s[k])] >= need));
   list.sort(sorters[sortBy] || sorters.score);
   const title = guFilter || [...new Set(groups.map((g) => g.gu))].join(" · ");
@@ -416,7 +434,7 @@ function card(g) {
       <div class="score"><b>${s.total ?? "…"}</b><span>종합 점수</span></div>
       <div>
         <div class="name">${esc(g.apt)}</div>
-        <div class="meta">${esc(g.gu)} ${esc(g.dong)} · ${g.built}년 준공 (${year - g.built + 1}년차)</div>
+        <div class="meta">${esc(g.gu)} ${esc(g.dong)} · ${g.built}년 준공 (${year - g.built + 1}년차)${bldHtml(g)}</div>
         <div class="chips">${CATS.map((c) => badge(c.name, s[c.k])).join("")}</div>
         <div class="near">${nearHtml(g)}</div>
         ${workPlace ? `<div class="near">${commuteHtml(g)}</div>` : ""}
@@ -440,6 +458,16 @@ function card(g) {
       </table>
     </div>
   </div>`;
+}
+
+// ---- 건축물대장 (세대수·용적률·건폐율) ----
+function bldHtml(g) {
+  const b = g.place?.building;
+  if (!b || b.error || !b.households) return "";
+  const parts = [`${b.households.toLocaleString()}세대`];
+  if (b.far) parts.push(`용적률 ${b.far}%`);
+  if (b.bcr) parts.push(`건폐율 ${b.bcr}%`);
+  return " · " + parts.join(" · ");
 }
 
 // ---- 주변 정보 (카카오맵) ----
