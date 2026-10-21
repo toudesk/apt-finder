@@ -54,8 +54,14 @@ async function getList(key, gu) {
 
 // 이 API는 JSON으로 답해요: { response: { header: {resultCode}, body: {...} } }
 async function get(url) {
-  const r = await fetch(url);
-  const text = await r.text();
+  let r, text;
+  // 공공데이터포털은 너무 빨리 여러 번 부르면 429(요청 과다)로 거절해요 → 잠깐 쉬었다가 다시 시도
+  for (let i = 0; i < 4; i++) {
+    r = await fetch(url);
+    text = await r.text();
+    if (r.status !== 429) break;
+    await new Promise((ok) => setTimeout(ok, 700 * (i + 1)));
+  }
   let data = null;
   try { data = JSON.parse(text); } catch {}
   const resp = data?.response || data || {};
@@ -67,9 +73,12 @@ async function get(url) {
 }
 
 // ---- 이름 맞추기: 실거래가의 단지명과 K-apt 단지명은 표기가 조금씩 달라요 ----
-// 예) "상계주공7(고층)" ↔ "상계주공7단지", "중계무지개" ↔ "중계무지개아파트"
-function norm(s) {
-  return s.replace(/\(.*?\)/g, "").replace(/아파트|단지|APT|apt/g, "").replace(/[^0-9a-zA-Z가-힣]/g, "");
+// 예) "상계주공7(고층)" ↔ "상계주공7단지", "한신4차" ↔ "한신(4차)", "성원(사슴4)" ↔ "사슴4단지"
+const clean = (s) => s.replace(/아파트|APT|apt/g, "").replace(/단지/g, "").replace(/[^0-9a-zA-Z가-힣]/g, "");
+// 괄호 안 글자를 뺀 것 / 괄호 안 글자만 / 괄호만 지운 것, 세 가지 모양을 만들어 비교해요
+function forms(s) {
+  const inner = (s.match(/\((.*?)\)/g) || []).map((x) => x.slice(1, -1)).join("");
+  return [...new Set([clean(s.replace(/\(.*?\)/g, "")), clean(inner), clean(s)].filter((x) => x.length >= 2))];
 }
 const digits = (s) => (s.match(/\d+/g) || []).join(",");
 function bigrams(s) { const a = []; for (let i = 0; i < s.length - 1; i++) a.push(s.slice(i, i + 2)); return a; }
@@ -80,14 +89,23 @@ function dice(a, b) {
   for (const x of A) { const i = pool.indexOf(x); if (i >= 0) { hit++; pool.splice(i, 1); } }
   return (2 * hit) / (A.length + B.length);
 }
+function pairScore(a, b) {
+  const da = digits(a), db = digits(b);
+  let pen = 1;
+  if (da !== db) {
+    if (da && db) return 0;   // 둘 다 번호가 있는데 다르면 다른 단지 (예: 7단지 ↔ 17단지)
+    pen = 0.8;                // 한쪽만 번호가 있으면 조금 감점
+  }
+  if (a === b) return 1 * pen;
+  if (a.includes(b) || b.includes(a)) return 0.9 * pen;
+  return dice(a, b) * pen;
+}
 function match(list, dong, name) {
-  const target = norm(name);
+  const T = forms(name);
   const score = (c) => {
-    const n = norm(c.kaptName);
-    if (!n || digits(n) !== digits(target)) return 0; // 숫자(단지 번호)가 다르면 다른 단지
-    if (n === target) return 1;
-    if (n.includes(target) || target.includes(n)) return 0.9;
-    return dice(n, target);
+    let best = 0;
+    for (const a of T) for (const b of forms(c.kaptName)) best = Math.max(best, pairScore(a, b));
+    return best;
   };
   const pick = (cands) => {
     let best = null, bestS = 0;
