@@ -472,10 +472,15 @@ function bldHtml(g) {
   return parts.length ? " · " + parts.join(" · ") : "";
 }
 const GU_CODE = Object.fromEntries(GU.map(([n, c]) => [n, c]));
+// 공공데이터포털이 한꺼번에 많이 부르면 거절해서(429), 2개씩 천천히 부르고 실패하면 한 번 더 시도해요
 function loadComplex() {
-  return runQueue(groups, 6, async (g) => {
-    try { g.kapt = await (await fetch(`/api/complex?gu=${GU_CODE[g.gu]}&dong=${encodeURIComponent(g.dong)}&name=${encodeURIComponent(g.apt)}`)).json(); }
-    catch { g.kapt = { error: true }; }
+  const url = (g) => `/api/complex?gu=${GU_CODE[g.gu]}&dong=${encodeURIComponent(g.dong)}&name=${encodeURIComponent(g.apt)}`;
+  return runQueue(groups, 2, async (g) => {
+    for (let i = 0; i < 2; i++) {
+      try { g.kapt = await (await fetch(url(g))).json(); } catch { g.kapt = { error: true }; }
+      if (!g.kapt.error) break;
+      await new Promise((ok) => setTimeout(ok, 1500));
+    }
   });
 }
 
