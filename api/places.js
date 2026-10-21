@@ -119,6 +119,14 @@ async function getBuilding(lot) {
   const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 
   const recap = await items("getBrRecapTitleInfo");
+  const titlesAll = await items("getBrTitleInfo");
+  const dbg = {
+    lot: `${q.sigunguCd}-${q.bjdongCd} ${q.bun}-${q.ji}`,
+    recap: recap.map((it) => ["bldNm", "hhldCnt", "vlRat", "bcRat", "platPlc", "mainBldCnt"].map((k) => tag(it, k)).join("|")),
+    titles: titlesAll.length,
+    titleSum: titlesAll.reduce((s, it) => s + num(tag(it, "hhldCnt")), 0),
+    titleSample: titlesAll.slice(0, 3).map((it) => ["bldNm", "dongNm", "hhldCnt", "vlRat", "mainPurpsCdNm"].map((k) => tag(it, k)).join("|")),
+  };
   if (recap.length) {
     const best = recap.sort((a, b) => num(tag(b, "hhldCnt")) - num(tag(a, "hhldCnt")))[0];
     if (num(tag(best, "hhldCnt")) > 0) {
@@ -127,16 +135,18 @@ async function getBuilding(lot) {
         far: Math.round(num(tag(best, "vlRat"))) || null,
         bcr: Math.round(num(tag(best, "bcRat"))) || null,
         approved: tag(best, "useAprDay") || null,
+        dbg,
       };
     }
   }
-  const titles = (await items("getBrTitleInfo")).filter((it) => num(tag(it, "hhldCnt")) > 0);
-  if (!titles.length) return null;
+  const titles = titlesAll.filter((it) => num(tag(it, "hhldCnt")) > 0);
+  if (!titles.length) return { dbg };
   return {
     households: titles.reduce((s, it) => s + num(tag(it, "hhldCnt")), 0),
     far: Math.round(num(tag(titles[0], "vlRat"))) || null,
     bcr: Math.round(num(tag(titles[0], "bcRat"))) || null,
     approved: tag(titles[0], "useAprDay") || null,
+    dbg,
   };
 }
 function tag(xml, name) {
