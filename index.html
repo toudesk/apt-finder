@@ -167,7 +167,7 @@
   <div id="result"></div>
 
   <footer>
-    데이터: 국토교통부 아파트 매매 실거래가·건축물대장(공공데이터포털), 카카오맵(역·마트·백화점·중학교 위치, 대중교통 경로).
+    데이터: 국토교통부 아파트 매매 실거래가·공동주택 단지정보·건축물대장(공공데이터포털), 카카오맵(역·마트·백화점·중학교 위치, 대중교통 경로).
     취소된 거래는 뺐어요. 출근 시간은 조회한 시각 기준이라 실제 출근 시간대와 다를 수 있어요.
     점수와 등급은 이 앱이 정한 기준으로 계산한 참고용이에요. 실제 매물·가격·학교 배정은 꼭 직접 확인하세요.
   </footer>
@@ -240,8 +240,8 @@ function scoreOf(g) {
   // 신축: 5년차 이하 100 ~ 40년차 0
   s.fresh = lerp(year - g.built + 1, 5, 40);
   // 규모: 건축물대장 세대수 (1,000세대 이상 100 ~ 100세대 0)
-  const b = p && p.building && p.building.households ? p.building : null;
-  s.size = b ? lerp(b.households, 1000, 100) : null;
+  const hh = g.kapt?.households;
+  s.size = hh ? lerp(hh, 1000, 100) : null;
   let sum = 0, w = 0;
   for (const c of CATS) if (s[c.k] != null && weights[c.k] > 0) { sum += s[c.k] * weights[c.k]; w += weights[c.k]; }
   // 주변 정보를 못 찾은 단지는 종합 점수를 매기지 않아요 (가격·신축만으로 높게 나오는 걸 막으려고)
@@ -321,6 +321,7 @@ function build(lists) {
   workPlace = $("work").value.trim();
   openIds.clear();
   renderAll();
+  loadComplex();
   loadPlaces().then(() => { renderAll(); loadCommute(); });
 }
 
@@ -393,7 +394,7 @@ function renderList() {
   };
   if (!groups.length) { $("result").innerHTML = `<p class="empty">조건에 맞는 거래가 없어요. 예산이나 기간을 넓혀 보세요.</p>`; return; }
   const minHH = +$("hh").value;
-  const hhOf = (g) => g.place?.building?.households;
+  const hhOf = (g) => g.kapt?.households;
   let list = groups.filter((g) =>
     (!guFilter || g.gu === guFilter) &&
     (!minHH || hhOf(g) == null || hhOf(g) >= minHH) &&
@@ -462,12 +463,18 @@ function card(g) {
 
 // ---- 건축물대장 (세대수·용적률·건폐율) ----
 function bldHtml(g) {
+  const parts = [];
+  if (g.kapt?.households) parts.push(`${g.kapt.households.toLocaleString()}세대`);
   const b = g.place?.building;
-  if (!b || b.error || !b.households) return "";
-  const parts = [`${b.households.toLocaleString()}세대`];
-  if (b.far) parts.push(`용적률 ${b.far}%`);
-  if (b.bcr) parts.push(`건폐율 ${b.bcr}%`);
-  return " · " + parts.join(" · ");
+  if (b && !b.error && b.far) { parts.push(`용적률 ${b.far}%`); if (b.bcr) parts.push(`건폐율 ${b.bcr}%`); }
+  return parts.length ? " · " + parts.join(" · ") : "";
+}
+const GU_CODE = Object.fromEntries(GU.map(([n, c]) => [n, c]));
+function loadComplex() {
+  return runQueue(groups, 6, async (g) => {
+    try { g.kapt = await (await fetch(`/api/complex?gu=${GU_CODE[g.gu]}&dong=${encodeURIComponent(g.dong)}&name=${encodeURIComponent(g.apt)}`)).json(); }
+    catch { g.kapt = { error: true }; }
+  });
 }
 
 // ---- 주변 정보 (카카오맵) ----
