@@ -3,7 +3,7 @@
 // API 키는 코드에 적지 않고, Vercel 설정의 환경변수 MOLIT_API_KEY 에 넣어요.
 
 const ENDPOINT =
-  "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade";
+       "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev";
 
 export default async function handler(req, res) {
   const gu = String(req.query.gu || "");
