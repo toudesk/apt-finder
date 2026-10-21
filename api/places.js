@@ -1,7 +1,8 @@
 // 단지 주소를 받아서 카카오맵으로 주변 정보를 찾아주는 서버 함수예요.
 // /api/places?addr=서울 노원구 중계동 393&name=중계무지개
-// 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수, 가장 가까운 중학교
-// 카카오 REST API 키는 Vercel 환경변수 KAKAO_REST_KEY 에 넣어요.
+// 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수, 가장 가까운 중학교,
+//            건축물대장의 세대수·용적률·건폐율
+// 카카오 REST API 키는 KAKAO_REST_KEY, 건축물대장은 공공데이터포털 키 MOLIT_API_KEY 를 써요.
 
 const KAKAO = "https://dapi.kakao.com/v2/local";
 
@@ -21,15 +22,20 @@ export default async function handler(req, res) {
 
   try {
     // 1) 단지 위치 찾기: 지번 주소 → 안 되면 "동 + 단지명" 검색
-    let pos = null;
+    let pos = null, lot = null; // lot: 건축물대장 조회용 지번 정보
     if (addr) {
       const a = await call("search/address.json", { query: addr, size: "1" });
-      if (a.documents?.[0]) pos = { x: a.documents[0].x, y: a.documents[0].y };
+      if (a.documents?.[0]) { pos = { x: a.documents[0].x, y: a.documents[0].y }; lot = a.documents[0].address; }
     }
     if (!pos && name) {
       const dongPart = addr.split(" ").slice(0, 3).join(" ");
       const k = await call("search/keyword.json", { query: `${dongPart} ${name}`, size: "1" });
-      if (k.documents?.[0]) pos = { x: k.documents[0].x, y: k.documents[0].y };
+      const d = k.documents?.[0];
+      if (d) {
+        pos = { x: d.x, y: d.y };
+        const a2 = await call("search/address.json", { query: d.address_name, size: "1" }).catch(() => null);
+        lot = a2?.documents?.[0]?.address || null;
+      }
     }
     if (!pos) return res.status(200).json({ found: false });
 
@@ -44,12 +50,13 @@ export default async function handler(req, res) {
       }
       return out;
     };
-    const [sub, martDocs, deptDocs, schoolDocs] = await Promise.all([
+    const [sub, martDocs, deptDocs, schoolDocs, building] = await Promise.all([
       call("search/category.json", { ...near, sort: "distance", category_group_code: "SW8", size: "1" }),
       all("search/category.json", { ...near, sort: "distance", category_group_code: "MT1" }),
       all("search/keyword.json", { ...near, sort: "accuracy", query: "백화점" }),
       call("search/keyword.json", { x: pos.x, y: pos.y, radius: "3000", sort: "distance", category_group_code: "SC4", query: "중학교", size: "15" })
         .then((r) => r.documents || []),
+      getBuilding(lot).catch((e) => ({ error: e.message })),
     ]);
     // 가장 가까운 중학교 (분류가 '중학교'인 곳만)
     const sc = schoolDocs.find((d) => /중학교$/.test(d.category_name));
@@ -79,8 +86,60 @@ export default async function handler(req, res) {
       marts: marts.size,
       depts: depts.size,
       school: sc ? { name: sc.place_name, meters: Number(sc.distance) } : null,
+      building,
     });
   } catch (e) {
     return res.status(502).json({ error: e.message });
   }
+}
+
+// ---- 건축물대장 (국토교통부_건축HUB_건축물대장정보 서비스) ----
+// 아파트 단지는 보통 '총괄표제부'에 단지 전체 세대수·용적률·건폐율이 있고,
+// 동이 하나뿐인 아파트는 '표제부'에만 있어서 그쪽도 찾아봐요.
+const BLD = "https://apis.data.go.kr/1613000/BldRgstHubService";
+async function getBuilding(lot) {
+  let key = process.env.MOLIT_API_KEY || "";
+  if (!key || !lot?.b_code) return null;
+  if (key.includes("%")) key = decodeURIComponent(key);
+  const pad = (v) => String(v || "0").padStart(4, "0");
+  const q = {
+    serviceKey: key, sigunguCd: lot.b_code.slice(0, 5), bjdongCd: lot.b_code.slice(5, 10),
+    platGbCd: lot.mountain_yn === "Y" ? "1" : "0", bun: pad(lot.main_address_no), ji: pad(lot.sub_address_no),
+    numOfRows: "100", pageNo: "1",
+  };
+  const items = async (op) => {
+    const r = await fetch(`${BLD}/${op}?${new URLSearchParams(q)}`);
+    const xml = await r.text();
+    const code = tag(xml, "resultCode");
+    if (!r.ok || (code && code !== "00" && code !== "000")) {
+      throw new Error(`건축물대장 API 오류: ${tag(xml, "resultMsg") || r.status}`);
+    }
+    return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => m[1]);
+  };
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+
+  const recap = await items("getBrRecapTitleInfo");
+  if (recap.length) {
+    const best = recap.sort((a, b) => num(tag(b, "hhldCnt")) - num(tag(a, "hhldCnt")))[0];
+    if (num(tag(best, "hhldCnt")) > 0) {
+      return {
+        households: num(tag(best, "hhldCnt")),
+        far: Math.round(num(tag(best, "vlRat"))) || null,
+        bcr: Math.round(num(tag(best, "bcRat"))) || null,
+        approved: tag(best, "useAprDay") || null,
+      };
+    }
+  }
+  const titles = (await items("getBrTitleInfo")).filter((it) => num(tag(it, "hhldCnt")) > 0);
+  if (!titles.length) return null;
+  return {
+    households: titles.reduce((s, it) => s + num(tag(it, "hhldCnt")), 0),
+    far: Math.round(num(tag(titles[0], "vlRat"))) || null,
+    bcr: Math.round(num(tag(titles[0], "bcRat"))) || null,
+    approved: tag(titles[0], "useAprDay") || null,
+  };
+}
+function tag(xml, name) {
+  const m = xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
+  return m ? m[1].trim() : "";
 }
