@@ -1,7 +1,7 @@
 // 단지 주소를 받아서 카카오맵으로 주변 정보를 찾아주는 서버 함수예요.
 // /api/places?addr=서울 노원구 중계동 393&name=중계무지개
 // 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수, 가장 가까운 중학교,
-//            건축물대장의 세대수·용적률·건폐율
+//            건축물대장의 용적률·건폐율(값이 있을 때)
 // 카카오 REST API 키는 KAKAO_REST_KEY, 건축물대장은 공공데이터포털 키 MOLIT_API_KEY 를 써요.
 
 const KAKAO = "https://dapi.kakao.com/v2/local";
@@ -94,60 +94,29 @@ export default async function handler(req, res) {
 }
 
 // ---- 건축물대장 (국토교통부_건축HUB_건축물대장정보 서비스) ----
-// 아파트 단지는 보통 '총괄표제부'에 단지 전체 세대수·용적률·건폐율이 있고,
-// 동이 하나뿐인 아파트는 '표제부'에만 있어서 그쪽도 찾아봐요.
+// 큰 단지는 지번이 여러 개로 나뉘어 있어서, 지번 하나의 건축물대장으로는 세대수가 일부만 나와요.
+// 그래서 세대수는 /api/complex(K-apt)에서 가져오고, 여기서는 용적률·건폐율만 써요 (값이 있을 때만).
 const BLD = "https://apis.data.go.kr/1613000/BldRgstHubService";
 async function getBuilding(lot) {
   let key = process.env.MOLIT_API_KEY || "";
   if (!key || !lot?.b_code) return null;
   if (key.includes("%")) key = decodeURIComponent(key);
   const pad = (v) => String(v || "0").padStart(4, "0");
-  const q = {
+  const q = new URLSearchParams({
     serviceKey: key, sigunguCd: lot.b_code.slice(0, 5), bjdongCd: lot.b_code.slice(5, 10),
     platGbCd: lot.mountain_yn === "Y" ? "1" : "0", bun: pad(lot.main_address_no), ji: pad(lot.sub_address_no),
     numOfRows: "100", pageNo: "1",
-  };
-  const items = async (op) => {
-    const r = await fetch(`${BLD}/${op}?${new URLSearchParams(q)}`);
-    const xml = await r.text();
-    const code = tag(xml, "resultCode");
-    if (!r.ok || (code && code !== "00" && code !== "000")) {
-      throw new Error(`건축물대장 API 오류: ${tag(xml, "resultMsg") || r.status}`);
-    }
-    return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => m[1]);
-  };
+  });
+  const r = await fetch(`${BLD}/getBrRecapTitleInfo?${q}`);
+  const xml = await r.text();
+  const code = tag(xml, "resultCode");
+  if (!r.ok || (code && code !== "00" && code !== "000")) throw new Error(`건축물대장 API 오류: ${tag(xml, "resultMsg") || r.status}`);
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => m[1]);
   const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
-
-  const recap = await items("getBrRecapTitleInfo");
-  const titlesAll = await items("getBrTitleInfo");
-  const dbg = {
-    lot: `${q.sigunguCd}-${q.bjdongCd} ${q.bun}-${q.ji}`,
-    recap: recap.map((it) => ["bldNm", "hhldCnt", "vlRat", "bcRat", "platPlc", "mainBldCnt"].map((k) => tag(it, k)).join("|")),
-    titles: titlesAll.length,
-    titleSum: titlesAll.reduce((s, it) => s + num(tag(it, "hhldCnt")), 0),
-    titleSample: titlesAll.slice(0, 3).map((it) => ["bldNm", "dongNm", "hhldCnt", "vlRat", "mainPurpsCdNm"].map((k) => tag(it, k)).join("|")),
-  };
-  if (recap.length) {
-    const best = recap.sort((a, b) => num(tag(b, "hhldCnt")) - num(tag(a, "hhldCnt")))[0];
-    if (num(tag(best, "hhldCnt")) > 0) {
-      return {
-        households: num(tag(best, "hhldCnt")),
-        far: Math.round(num(tag(best, "vlRat"))) || null,
-        bcr: Math.round(num(tag(best, "bcRat"))) || null,
-        approved: tag(best, "useAprDay") || null,
-        dbg,
-      };
-    }
-  }
-  const titles = titlesAll.filter((it) => num(tag(it, "hhldCnt")) > 0);
-  if (!titles.length) return { dbg };
-  return {
-    households: titles.reduce((s, it) => s + num(tag(it, "hhldCnt")), 0),
-    far: Math.round(num(tag(titles[0], "vlRat"))) || null,
-    bcr: Math.round(num(tag(titles[0], "bcRat"))) || null,
-    approved: tag(titles[0], "useAprDay") || null,
-    dbg,
-  };
+  // 공동주택(세대가 있는) 총괄표제부 중 용적률 값이 있는 것
+  const it = items.filter((x) => num(tag(x, "hhldCnt")) > 0 && num(tag(x, "vlRat")) > 0)[0];
+  if (!it) return null;
+  return { far: Math.round(num(tag(it, "vlRat"))), bcr: Math.round(num(tag(it, "bcRat"))) || null };
 }
 function tag(xml, name) {
   const m = xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
