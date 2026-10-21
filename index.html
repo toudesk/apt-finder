@@ -16,61 +16,109 @@
   :root {
     --bg: #f6f7f9; --card: #fff; --text: #1a1d23; --sub: #6b7280; --line: #e5e7eb;
     --accent: #2563eb; --accent-soft: #eff4ff; --warn-bg: #fff7e6; --warn: #92580a;
+    --gS: #7c3aed; --gS-bg: #f3edff; --gA: #059669; --gA-bg: #e7f8f1;
+    --gB: #b45309; --gB-bg: #fdf3e2; --gC: #6b7280; --gC-bg: #f1f2f4;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 60px; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 16px 60px; }
   h1 { font-size: 24px; margin: 0 0 4px; }
   .lead { color: var(--sub); margin: 0 0 20px; }
 
-  .filters { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-    padding: 16px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  label { display: grid; gap: 4px; font-size: 13px; color: var(--sub); font-weight: 500; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .filters { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  label, .lbl { display: grid; gap: 4px; font-size: 13px; color: var(--sub); font-weight: 500; }
   select, input { font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px;
     background: #fff; color: var(--text); width: 100%; }
+  .gus { grid-column: 1 / -1; }
+  .gu-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .gu-chips button { font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 99px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--text); }
+  .gu-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.go { grid-column: 1 / -1; font: inherit; font-weight: 700; padding: 12px; border: 0;
     border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; }
   button.go:disabled { opacity: .6; cursor: wait; }
 
   .notice { margin: 16px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg);
     color: var(--warn); font-size: 14px; }
+
+  h2 { font-size: 17px; margin: 26px 0 10px; }
+  .summary { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .sum { text-align: left; font: inherit; color: inherit; cursor: pointer; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .sum.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .sum .t { display: flex; justify-content: space-between; align-items: baseline; }
+  .sum .t b { font-size: 16px; }
+  .sum .t span { color: var(--sub); font-size: 13px; }
+  .sum .rows { margin-top: 8px; font-size: 13px; display: grid; gap: 3px; }
+  .sum .rows div { display: flex; justify-content: space-between; gap: 8px; }
+  .dist { display: flex; gap: 3px; }
+  .dist i { font-style: normal; font-size: 11px; padding: 0 5px; border-radius: 5px; }
+
+  .tools { margin-top: 10px; display: grid; gap: 10px; }
+  .tool-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--sub); }
+  .tool-row select { width: auto; padding: 6px 8px; font-size: 13px; }
+  details.weights summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 500; }
+  .wgrid { display: grid; gap: 8px 16px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 10px; }
+  .wgrid label { grid-template-columns: 1fr auto; align-items: center; }
+  .wgrid input[type=range] { grid-column: 1 / -1; padding: 0; }
+  .help { font-size: 12px; color: var(--sub); margin: 8px 0 0; }
+
   .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 22px 0 10px; }
   .bar strong { font-size: 17px; }
   .bar select { width: auto; }
 
   .apt { background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
-  .apt-head { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 14px 16px; cursor: pointer; }
+  .apt-head { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; padding: 14px 16px; cursor: pointer; }
   .apt-head:hover { background: #fafbfc; }
+  .score { width: 56px; text-align: center; }
+  .score b { display: block; font-size: 24px; line-height: 1.1; }
+  .score span { font-size: 11px; color: var(--sub); }
   .name { font-weight: 700; font-size: 16px; }
   .meta { color: var(--sub); font-size: 13px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .g { font-size: 12px; padding: 1px 7px; border-radius: 6px; font-weight: 500; white-space: nowrap; }
+  .gS { background: var(--gS-bg); color: var(--gS); } .gA { background: var(--gA-bg); color: var(--gA); }
+  .gB { background: var(--gB-bg); color: var(--gB); } .gC { background: var(--gC-bg); color: var(--gC); }
+  .g- { background: #f6f7f9; color: #9ca3af; }
   .price { text-align: right; }
   .price b { font-size: 18px; display: block; }
   .price span { font-size: 12px; color: var(--sub); }
+  .near { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 13px; color: var(--text); }
+  .near .muted { color: var(--sub); }
+  .near b { font-weight: 500; }
+  .links { display: flex; gap: 8px; margin-top: 8px; }
+  .links a { font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: 8px; background: #fff; }
   .deals { display: none; border-top: 1px solid var(--line); padding: 6px 16px 12px; }
   .apt.open .deals { display: block; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { padding: 7px 4px; text-align: left; border-bottom: 1px solid var(--line); }
   th { color: var(--sub); font-weight: 500; font-size: 12px; }
   td.r, th.r { text-align: right; }
-  .near { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 13px; color: var(--text); }
-  .near .muted { color: var(--sub); }
-  .near b { font-weight: 500; }
+  .breakdown { font-size: 13px; color: var(--sub); margin: 8px 0 4px; }
   .empty { text-align: center; color: var(--sub); padding: 40px 0; }
   footer { margin-top: 30px; font-size: 12px; color: var(--sub); }
+
+  @media (max-width: 560px) {
+    .apt-head { grid-template-columns: auto 1fr; }
+    .price { grid-column: 2; text-align: left; }
+    .price br { display: none; }
+    .price span { margin-right: 8px; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>내 아파트 찾기</h1>
-  <p class="lead">구와 예산을 고르면 최근 실거래된 아파트를 단지별로 모아 보여드려요.</p>
+  <p class="lead">구와 예산을 고르면 최근 실거래된 아파트를 단지별로 모아 점수와 등급을 매겨 드려요.</p>
 
-  <form class="filters" id="f">
-    <label>구
-      <select id="gu"></select>
-    </label>
+  <form class="panel filters" id="f">
+    <div class="lbl gus">구 (최대 3개)
+      <div class="gu-chips" id="gus"></div>
+    </div>
     <label>기간
       <select id="months">
         <option value="3">최근 3개월</option>
@@ -105,9 +153,15 @@
   </form>
 
   <div id="notice"></div>
+  <div id="summary"></div>
+  <div id="tools"></div>
   <div id="result"></div>
 
-  <footer>데이터: 국토교통부 아파트 매매 실거래가 (공공데이터포털). 취소된 거래는 뺐어요. 출근 시간은 카카오맵 대중교통 경로로, 조회한 시각 기준이라 실제 출근 시간대와 다를 수 있어요. 참고용이니 실제 매물·가격은 꼭 직접 확인하세요.</footer>
+  <footer>
+    데이터: 국토교통부 아파트 매매 실거래가(공공데이터포털), 카카오맵(역·마트·백화점·중학교 위치, 대중교통 경로).
+    취소된 거래는 뺐어요. 출근 시간은 조회한 시각 기준이라 실제 출근 시간대와 다를 수 있어요.
+    점수와 등급은 이 앱이 정한 기준으로 계산한 참고용이에요. 실제 매물·가격·학교 배정은 꼭 직접 확인하세요.
+  </footer>
 </div>
 
 <script>
@@ -116,13 +170,76 @@ const GU = [["종로구","11110"],["중구","11140"],["용산구","11170"],["성
   ["노원구","11350"],["은평구","11380"],["서대문구","11410"],["마포구","11440"],["양천구","11470"],
   ["강서구","11500"],["구로구","11530"],["금천구","11545"],["영등포구","11560"],["동작구","11590"],
   ["관악구","11620"],["서초구","11650"],["강남구","11680"],["송파구","11710"],["강동구","11740"]];
-
+const GU_NAME = Object.fromEntries(GU.map(([n, c]) => [c, n]));
 const $ = (id) => document.getElementById(id);
-$("gu").innerHTML = GU.map(([n, c]) => `<option value="${c}" ${c === "11350" ? "selected" : ""}>${n}</option>`).join("");
 
+// ---- 기억해 두는 설정 (이 브라우저에만 저장) ----
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---- 구 고르기 (최대 3개) ----
+let picked = store.get("gus", ["11350"]);
+function drawGus() {
+  $("gus").innerHTML = GU.map(([n, c]) =>
+    `<button type="button" data-c="${c}" class="${picked.includes(c) ? "on" : ""}">${n}</button>`).join("");
+}
+$("gus").addEventListener("click", (e) => {
+  const c = e.target.dataset?.c; if (!c) return;
+  if (picked.includes(c)) picked = picked.filter((x) => x !== c);
+  else { picked.push(c); if (picked.length > 3) picked.shift(); }
+  if (!picked.length) picked = [c];
+  store.set("gus", picked); drawGus();
+});
+drawGus();
+
+// ---- 점수 기준 ----
+const CATS = [
+  { k: "traffic", name: "교통", desc: "역까지 걷는 시간 + 출근 시간(입력했을 때)" },
+  { k: "life",    name: "생활", desc: "3km 안 큰 마트·백화점 수" },
+  { k: "school",  name: "학군", desc: "가장 가까운 중학교까지 거리" },
+  { k: "price",   name: "가격", desc: "같은 결과 안에서 평당 가격이 쌀수록 높음" },
+  { k: "fresh",   name: "신축", desc: "준공 연차가 짧을수록 높음" },
+];
+let weights = store.get("weights", { traffic: 3, life: 2, school: 2, price: 2, fresh: 1 });
+let gradeFilter = { traffic: 0, life: 0, school: 0 };  // 0=전체, 3=S만, 2=A이상, 1=B이상
+let guFilter = null;
+let sortBy = "score";
+
+const clamp = (v) => Math.max(0, Math.min(100, v));
+const lerp = (x, best, worst) => clamp(((worst - x) / (worst - best)) * 100); // best일 때 100, worst일 때 0
+const year = new Date().getFullYear();
+
+function scoreOf(g) {
+  const p = g.place && g.place.found ? g.place : null;
+  const s = {};
+  // 교통: 역 도보(5분 이하 100 ~ 20분 0) + 출근(30분 이하 100 ~ 80분 0)
+  const parts = [];
+  if (p && p.station) parts.push(lerp(p.station.walkMin, 5, 20));
+  else if (p) parts.push(0);
+  if (g.commute && g.commute.found) parts.push(lerp(g.commute.minutes, 30, 80));
+  s.traffic = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
+  // 생활: 큰 마트 4곳이면 만점(60%), 백화점 2곳이면 만점(40%)
+  s.life = p ? Math.min(p.marts, 4) / 4 * 60 + Math.min(p.depts, 2) / 2 * 40 : null;
+  // 학군: 중학교 300m 이내 100 ~ 1.5km 0
+  s.school = p ? (p.school ? lerp(p.school.meters, 300, 1500) : 0) : null;
+  // 가격: 결과 안에서 평당가 순위
+  s.price = g.priceRank;
+  // 신축: 5년차 이하 100 ~ 40년차 0
+  s.fresh = lerp(year - g.built + 1, 5, 40);
+  let sum = 0, w = 0;
+  for (const c of CATS) if (s[c.k] != null && weights[c.k] > 0) { sum += s[c.k] * weights[c.k]; w += weights[c.k]; }
+  s.total = w ? Math.round(sum / w) : null;
+  return s;
+}
+const grade = (v) => v == null ? "-" : v >= 85 ? "S" : v >= 70 ? "A" : v >= 50 ? "B" : "C";
+const gradeNum = { S: 3, A: 2, B: 1, C: 0, "-": -1 };
+const badge = (name, v) => `<span class="g g${grade(v)}" title="${name} ${v == null ? "계산 중" : Math.round(v) + "점"}">${name} ${grade(v)}</span>`;
+
+// ---- 공통 ----
 let groups = [];
-
-function won(man) { // 만원 → "5억 1,500"
+function won(man) {
   const eok = Math.floor(man / 10000), rest = man % 10000;
   if (!eok) return `${rest.toLocaleString()}만`;
   return rest ? `${eok}억 ${rest.toLocaleString()}` : `${eok}억`;
@@ -130,35 +247,47 @@ function won(man) { // 만원 → "5억 1,500"
 const pyeong = (m2) => Math.round(m2 / 3.3058);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// ---- 검색 ----
+let runToken = 0;
 $("f").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const token = ++runToken;
   const btn = $("go");
   btn.disabled = true; btn.textContent = "불러오는 중…";
-  $("notice").innerHTML = "";
+  $("notice").innerHTML = ""; guFilter = null;
   try {
-    const r = await fetch(`/api/trades?gu=${$("gu").value}&months=${$("months").value}`);
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "불러오지 못했어요.");
-    if (data.demo) $("notice").innerHTML = `<p class="notice">지금은 <b>예시 데이터</b>예요. API 키를 설정하면 실제 실거래가가 나와요.</p>`;
-    build(data.trades);
+    const months = $("months").value;
+    const lists = await Promise.all(picked.map(async (code) => {
+      const r = await fetch(`/api/trades?gu=${code}&months=${months}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "불러오지 못했어요.");
+      return { code, ...data };
+    }));
+    if (token !== runToken) return;
+    if (lists.some((l) => l.demo)) $("notice").innerHTML = `<p class="notice">지금은 <b>예시 데이터</b>예요. API 키를 설정하면 실제 실거래가가 나와요.</p>`;
+    build(lists);
   } catch (err) {
     $("result").innerHTML = `<p class="empty">${esc(err.message)}</p>`;
+    $("summary").innerHTML = $("tools").innerHTML = "";
   } finally {
     btn.disabled = false; btn.textContent = "찾아보기";
   }
 });
 
-function build(trades) {
+let workPlace = "";
+function build(lists) {
   const min = parseFloat($("min").value || 0) * 10000;
   const max = parseFloat($("max").value || 999) * 10000;
   const area = parseFloat($("area").value);
-  const ok = trades.filter((t) => t.price >= min && t.price <= max && t.area >= area);
-
   const map = new Map();
-  for (const t of ok) {
-    const k = `${t.apt}|${t.dong}|${t.jibun}`;
-    if (!map.has(k)) map.set(k, { id: map.size, apt: t.apt, dong: t.dong, jibun: t.jibun, built: t.built, deals: [] });
-    map.get(k).deals.push(t);
+  for (const l of lists) {
+    const gu = GU_NAME[l.code];
+    for (const t of l.trades) {
+      if (t.price < min || t.price > max || t.area < area) continue;
+      const k = `${gu}|${t.apt}|${t.dong}|${t.jibun}`;
+      if (!map.has(k)) map.set(k, { id: map.size, gu, apt: t.apt, dong: t.dong, jibun: t.jibun, built: t.built, deals: [] });
+      map.get(k).deals.push(t);
+    }
   }
   groups = [...map.values()].map((g) => {
     g.deals.sort((a, b) => b.date.localeCompare(a.date));
@@ -166,16 +295,79 @@ function build(trades) {
     g.low = Math.min(...g.deals.map((d) => d.price));
     g.high = Math.max(...g.deals.map((d) => d.price));
     g.sizes = [...new Set(g.deals.map((d) => pyeong(d.area)))].sort((a, b) => a - b);
+    g.ppp = g.latest.price / (g.latest.area / 3.3058); // 전용 평당 가격
     return g;
   });
+  // 가격 점수: 평당가가 낮은 순으로 100 → 0
+  const byP = [...groups].sort((a, b) => a.ppp - b.ppp);
+  byP.forEach((g, i) => g.priceRank = byP.length > 1 ? 100 * (1 - i / (byP.length - 1)) : 100);
+
   workPlace = $("work").value.trim();
-  render("count");
+  openIds.clear();
+  renderAll();
   loadPlaces();
   loadCommute();
 }
 
-function render(sort) {
+// ---- 화면 그리기 ----
+const openIds = new Set();
+let renderTimer = null;
+const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); };
+
+function renderAll() {
+  for (const g of groups) g.s = scoreOf(g);
+  renderSummary(); renderTools(); renderList();
+}
+
+function renderSummary() {
+  if (!groups.length) { $("summary").innerHTML = ""; return; }
+  const gus = [...new Set(groups.map((g) => g.gu))];
+  const avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+  const dist = (list, k) => ["S", "A", "B", "C"].map((x) =>
+    `<i class="g${x}">${x}${list.filter((g) => grade(g.s[k]) === x).length}</i>`).join("");
+  $("summary").innerHTML = `<h2>구별 요약 <span class="meta">— 누르면 그 구만 봐요</span></h2><div class="summary">${gus.map((gu) => {
+    const list = groups.filter((g) => g.gu === gu);
+    const sc = avg(list.map((g) => g.s.total).filter((v) => v != null));
+    const cm = avg(list.map((g) => g.commute?.found ? g.commute.minutes : null).filter((v) => v != null));
+    return `<button class="sum ${guFilter === gu ? "on" : ""}" data-gu="${esc(gu)}">
+      <div class="t"><b>${esc(gu)}</b><span>${list.length}개 단지</span></div>
+      <div class="rows">
+        <div><span>평균 점수</span><b>${sc ?? "…"}</b></div>
+        ${workPlace ? `<div><span>평균 출근</span><b>${cm != null ? cm + "분" : "…"}</b></div>` : ""}
+        <div><span>교통</span><span class="dist">${dist(list, "traffic")}</span></div>
+        <div><span>생활</span><span class="dist">${dist(list, "life")}</span></div>
+        <div><span>학군</span><span class="dist">${dist(list, "school")}</span></div>
+      </div></button>`;
+  }).join("")}</div>`;
+  $("summary").querySelectorAll(".sum").forEach((b) => b.onclick = () => {
+    guFilter = guFilter === b.dataset.gu ? null : b.dataset.gu; renderAll();
+  });
+}
+
+function renderTools() {
+  if (!groups.length) { $("tools").innerHTML = ""; return; }
+  if ($("tools").dataset.ready) return; // 한 번만 그려요 (슬라이더 조작 중 끊기지 않게)
+  const opt = (k) => `<label style="display:flex;gap:6px;align-items:center">${CATS.find((c) => c.k === k).name}
+    <select data-gf="${k}"><option value="0">전체</option><option value="3">S만</option><option value="2">A 이상</option><option value="1">B 이상</option></select></label>`;
+  $("tools").innerHTML = `<div class="panel tools">
+    <div class="tool-row">등급으로 거르기 ${opt("traffic")} ${opt("life")} ${opt("school")}</div>
+    <details class="weights"><summary>점수 기준 비중 조절</summary>
+      <div class="wgrid">${CATS.map((c) => `<label>${c.name} <b id="wv-${c.k}">${weights[c.k]}</b>
+        <input type="range" min="0" max="3" step="1" value="${weights[c.k]}" data-w="${c.k}" />
+        <span style="grid-column:1/-1;font-weight:400">${c.desc}</span></label>`).join("")}</div>
+      <p class="help">0이면 그 기준은 빼고 계산해요. 등급: S 85점 이상 · A 70 이상 · B 50 이상 · C 그 아래.</p>
+    </details></div>`;
+  $("tools").dataset.ready = "1";
+  $("tools").querySelectorAll("[data-gf]").forEach((s) => s.onchange = () => { gradeFilter[s.dataset.gf] = +s.value; renderAll(); });
+  $("tools").querySelectorAll("[data-w]").forEach((r) => r.oninput = () => {
+    weights[r.dataset.w] = +r.value; $(`wv-${r.dataset.w}`).textContent = r.value;
+    store.set("weights", weights); scheduleRender();
+  });
+}
+
+function renderList() {
   const sorters = {
+    score: (a, b) => (b.s.total ?? -1) - (a.s.total ?? -1),
     count: (a, b) => b.deals.length - a.deals.length,
     low: (a, b) => a.latest.price - b.latest.price,
     high: (a, b) => b.latest.price - a.latest.price,
@@ -184,18 +376,17 @@ function render(sort) {
     station: (a, b) => walk(a) - walk(b),
     commute: (a, b) => ride(a) - ride(b),
   };
-  groups.sort(sorters[sort]);
-  const guName = $("gu").selectedOptions[0].text;
-  const year = new Date().getFullYear();
-
-  if (!groups.length) {
-    $("result").innerHTML = `<p class="empty">조건에 맞는 거래가 없어요. 예산이나 기간을 넓혀 보세요.</p>`;
-    return;
-  }
+  if (!groups.length) { $("result").innerHTML = `<p class="empty">조건에 맞는 거래가 없어요. 예산이나 기간을 넓혀 보세요.</p>`; return; }
+  let list = groups.filter((g) =>
+    (!guFilter || g.gu === guFilter) &&
+    Object.entries(gradeFilter).every(([k, need]) => !need || gradeNum[grade(g.s[k])] >= need));
+  list.sort(sorters[sortBy] || sorters.score);
+  const title = guFilter || [...new Set(groups.map((g) => g.gu))].join(" · ");
   $("result").innerHTML = `
     <div class="bar">
-      <strong>${esc(guName)} · ${groups.length}개 단지</strong>
+      <strong>${esc(title)} · ${list.length}개 단지</strong>
       <select id="sort">
+        <option value="score">종합 점수 순</option>
         <option value="count">거래 많은 순</option>
         <option value="recent">최근 거래 순</option>
         <option value="low">가격 낮은 순</option>
@@ -205,76 +396,80 @@ function render(sort) {
         ${workPlace ? `<option value="commute">출근 짧은 순</option>` : ""}
       </select>
     </div>
-    ${groups.map((g, i) => `
-      <div class="apt" data-i="${i}">
-        <div class="apt-head">
-          <div>
-            <div class="name">${esc(g.apt)}</div>
-            <div class="meta">${esc(g.dong)} · ${g.built}년 준공 (${year - g.built + 1}년차)</div>
-            <div class="chips">
-              <span class="chip">거래 ${g.deals.length}건</span>
-              <span class="chip">전용 ${g.sizes.join("·")}평</span>
-            </div>
-            <div class="near" id="near-${g.id}">${nearHtml(g)}</div>
-            ${workPlace ? `<div class="near" id="work-${g.id}">${commuteHtml(g)}</div>` : ""}
-          </div>
-          <div class="price">
-            <b>${won(g.latest.price)}</b>
-            <span>최근 ${g.latest.date.slice(5).replace("-", ".")}</span><br/>
-            <span>${g.low === g.high ? "" : `${won(g.low)} ~ ${won(g.high)}`}</span>
-          </div>
-        </div>
-        <div class="deals">
-          <table>
-            <tr><th>거래일</th><th>전용면적</th><th>층</th><th class="r">가격</th></tr>
-            ${g.deals.map((d) => `<tr><td>${d.date}</td><td>${d.area}㎡ (${pyeong(d.area)}평)</td><td>${d.floor}층</td><td class="r">${won(d.price)}</td></tr>`).join("")}
-          </table>
-        </div>
-      </div>`).join("")}`;
-  $("sort").value = sort;
-  $("sort").onchange = (e) => render(e.target.value);
-  document.querySelectorAll(".apt-head").forEach((h) => h.onclick = () => h.parentElement.classList.toggle("open"));
+    ${list.length ? list.map(card).join("") : `<p class="empty">이 등급 조건에 맞는 단지가 없어요.</p>`}`;
+  $("sort").value = sortBy;
+  $("sort").onchange = (e) => { sortBy = e.target.value; renderList(); };
+  document.querySelectorAll(".apt-head").forEach((h) => h.onclick = (e) => {
+    if (e.target.closest("a")) return;
+    const id = +h.parentElement.dataset.id;
+    openIds.has(id) ? openIds.delete(id) : openIds.add(id);
+    h.parentElement.classList.toggle("open");
+  });
 }
 
-// ---- 2단계: 카카오맵 주변 정보 ----
-const walk = (g) => g.place?.station ? g.place.station.walkMin : 999;
+function card(g) {
+  const s = g.s;
+  const q = encodeURIComponent(`${g.gu} ${g.dong} ${g.apt} 아파트`);
+  return `
+  <div class="apt ${openIds.has(g.id) ? "open" : ""}" data-id="${g.id}">
+    <div class="apt-head">
+      <div class="score"><b>${s.total ?? "…"}</b><span>종합 점수</span></div>
+      <div>
+        <div class="name">${esc(g.apt)}</div>
+        <div class="meta">${esc(g.gu)} ${esc(g.dong)} · ${g.built}년 준공 (${year - g.built + 1}년차)</div>
+        <div class="chips">${CATS.map((c) => badge(c.name, s[c.k])).join("")}</div>
+        <div class="near">${nearHtml(g)}</div>
+        ${workPlace ? `<div class="near">${commuteHtml(g)}</div>` : ""}
+        <div class="links">
+          <a href="https://search.naver.com/search.naver?query=${q}%20%EB%A7%A4%EB%AC%BC" target="_blank" rel="noopener">네이버 매물 검색</a>
+          <a href="https://map.kakao.com/?q=${encodeURIComponent(`${g.gu} ${g.dong} ${g.apt}`)}" target="_blank" rel="noopener">지도</a>
+        </div>
+      </div>
+      <div class="price">
+        <b>${won(g.latest.price)}</b>
+        <span>최근 ${g.latest.date.slice(5).replace("-", ".")} · 거래 ${g.deals.length}건</span><br/>
+        <span>${g.low === g.high ? "" : `${won(g.low)} ~ ${won(g.high)}`}</span><br/>
+        <span>전용 ${g.sizes.join("·")}평</span>
+      </div>
+    </div>
+    <div class="deals">
+      <p class="breakdown">${CATS.map((c) => `${c.name} ${s[c.k] == null ? "계산 중" : Math.round(s[c.k]) + "점"}`).join(" · ")}</p>
+      <table>
+        <tr><th>거래일</th><th>전용면적</th><th>층</th><th class="r">가격</th></tr>
+        ${g.deals.map((d) => `<tr><td>${d.date}</td><td>${d.area}㎡ (${pyeong(d.area)}평)</td><td>${d.floor}층</td><td class="r">${won(d.price)}</td></tr>`).join("")}
+      </table>
+    </div>
+  </div>`;
+}
 
+// ---- 주변 정보 (카카오맵) ----
+const walk = (g) => g.place?.station ? g.place.station.walkMin : 999;
 function nearHtml(g) {
   const p = g.place;
   if (p === undefined) return `<span class="muted">주변 정보 불러오는 중…</span>`;
   if (!p || p.none || p.error || !p.found) return p?.none ? "" : `<span class="muted">주변 정보를 찾지 못했어요</span>`;
-  const st = p.station
-    ? `<span><b>${esc(p.station.name)}</b> 도보 약 ${p.station.walkMin}분</span>`
-    : `<span class="muted">3km 안 지하철역 없음</span>`;
-  return `${st}<span>대형마트 <b>${p.marts}</b> · 백화점 <b>${p.depts}</b> <span class="muted">(3km 안)</span></span>`;
+  const st = p.station ? `<span><b>${esc(p.station.name)}</b> 도보 약 ${p.station.walkMin}분</span>` : `<span class="muted">3km 안 지하철역 없음</span>`;
+  const sc = p.school ? `<span>${esc(p.school.name)} ${p.school.meters.toLocaleString()}m</span>` : `<span class="muted">3km 안 중학교 없음</span>`;
+  return `${st}<span>마트 <b>${p.marts}</b> · 백화점 <b>${p.depts}</b></span>${sc}`;
 }
 
-let loadToken = 0;
-async function loadPlaces() {
-  const token = ++loadToken; // 새로 검색하면 이전 불러오기는 멈춰요
-  const guName = $("gu").selectedOptions[0].text;
-  const queue = [...groups];
-  const worker = async () => {
-    while (queue.length && token === loadToken) {
-      const g = queue.shift();
-      try {
-        const addr = `서울 ${guName} ${g.dong} ${g.jibun}`.trim();
-        const r = await fetch(`/api/places?addr=${encodeURIComponent(addr)}&name=${encodeURIComponent(g.apt)}`);
-        g.place = await r.json();
-      } catch { g.place = { error: true }; }
-      if (token !== loadToken) return;
-      const el = document.getElementById(`near-${g.id}`);
-      if (el) el.innerHTML = nearHtml(g);
-    }
-  };
-  await Promise.all(Array.from({ length: 6 }, worker));
+async function runQueue(items, size, job) {
+  const token = runToken; const queue = [...items];
+  await Promise.all(Array.from({ length: size }, async () => {
+    while (queue.length && token === runToken) { const g = queue.shift(); if (await job(g) === "stop") queue.length = 0; scheduleRender(); }
+  }));
+}
+const addrOf = (g) => `서울 ${g.gu} ${g.dong} ${g.jibun}`.trim();
+
+function loadPlaces() {
+  return runQueue(groups, 6, async (g) => {
+    try { g.place = await (await fetch(`/api/places?addr=${encodeURIComponent(addrOf(g))}&name=${encodeURIComponent(g.apt)}`)).json(); }
+    catch { g.place = { error: true }; }
+  });
 }
 
-// ---- 4단계: 출근 시간 (카카오 대중교통 경로) ----
-let workPlace = "";
-let commuteToken = 0;
+// ---- 출근 시간 (카카오 대중교통) ----
 const ride = (g) => (g.commute?.found ? g.commute.minutes : 9999);
-
 function commuteHtml(g) {
   const c = g.commute;
   if (c === undefined) return `<span class="muted">${esc(workPlace)}까지 출근 시간 계산 중…</span>`;
@@ -283,33 +478,16 @@ function commuteHtml(g) {
   const tr = c.transfers == null ? "" : c.transfers === 0 ? " · 환승 없음" : ` · 환승 ${c.transfers}회`;
   return `<span>${esc(c.dest || workPlace)}까지 대중교통 <b>약 ${c.minutes}분</b>${tr}</span>`;
 }
-
-async function loadCommute() {
-  const token = ++commuteToken;
+function loadCommute() {
   if (!workPlace) return;
-  const guName = $("gu").selectedOptions[0].text;
-  const queue = [...groups];
-  let stop = false;
-  const worker = async () => {
-    while (queue.length && token === commuteToken && !stop) {
-      const g = queue.shift();
-      try {
-        const addr = `서울 ${guName} ${g.dong} ${g.jibun}`.trim();
-        const r = await fetch(`/api/commute?addr=${encodeURIComponent(addr)}&name=${encodeURIComponent(g.apt)}&to=${encodeURIComponent(workPlace)}`);
-        g.commute = await r.json();
-        if (g.commute.quota) stop = true; // 무료 조회량이 끝나면 더 부르지 않아요
-      } catch { g.commute = { found: false }; }
-      if (token !== commuteToken) return;
-      const el = document.getElementById(`work-${g.id}`);
-      if (el) el.innerHTML = commuteHtml(g);
-    }
-    if (stop) for (const g of queue.splice(0)) {
-      g.commute = { quota: true };
-      const el = document.getElementById(`work-${g.id}`);
-      if (el) el.innerHTML = commuteHtml(g);
-    }
-  };
-  await Promise.all(Array.from({ length: 4 }, worker));
+  let stopped = false;
+  return runQueue(groups, 4, async (g) => {
+    if (stopped) { g.commute = { quota: true }; return; }
+    try {
+      g.commute = await (await fetch(`/api/commute?addr=${encodeURIComponent(addrOf(g))}&name=${encodeURIComponent(g.apt)}&to=${encodeURIComponent(workPlace)}`)).json();
+    } catch { g.commute = { found: false }; }
+    if (g.commute.quota) { stopped = true; groups.forEach((x) => { if (x.commute === undefined) x.commute = { quota: true }; }); return "stop"; }
+  });
 }
 
 // ---- 앱처럼 설치 (서비스 워커 등록) ----
