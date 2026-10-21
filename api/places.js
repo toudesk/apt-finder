@@ -79,15 +79,18 @@ export default async function handler(req, res) {
     let apts = null;
     if (aptDocs) {
       const NOT = /(상가|관리|경비|어린이집|유치원|놀이터|정문|후문|주차|노인정|경로당|커뮤니티|피트니스|분양|모델하우스|부동산)/;
-      const seen = new Map();
+      const seen = new Map(); // 단지 이름 → { m: 거리, a: 지번 주소, n: 원래 이름 }
       for (const d of aptDocs) {
         if (!/아파트$/.test(d.category_name || "") || NOT.test(d.place_name)) continue;
-        const base = d.place_name.replace(/\s*\d+동$/, "").replace(/\(.*?\)/g, "").replace(/아파트|\s/g, "");
+        const name = d.place_name.replace(/\s*\d+동$/, "");
+        const base = name.replace(/\(.*?\)/g, "").replace(/아파트|\s/g, "");
         const m = Number(d.distance);
-        if (!seen.has(base) || seen.get(base) > m) seen.set(base, m);
+        if (!seen.has(base) || seen.get(base).m > m) seen.set(base, { m, a: d.address_name || "", n: name });
       }
-      const ds = [...seen.values()];
-      apts = { in500: ds.filter((m) => m <= 500).length, in1k: ds.length, more: aptDocs.length >= 45 };
+      const ds = [...seen.values()].map((x) => x.m);
+      apts = { in500: ds.filter((m) => m <= 500).length, in1k: ds.length, more: aptDocs.length >= 45,
+        // 1km 안 세대수 합계는 화면에서 K-apt 세대수로 더해요 → [이름, 거리, 주소]
+        list: [...seen.values()].map((x) => [x.n, x.m, x.a]) };
     }
 
     // 결과는 오래 저장해 둬요 (역·마트 위치는 거의 안 바뀌니까요)
