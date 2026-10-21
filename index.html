@@ -140,7 +140,12 @@
   .totcol { text-align: center; }
   .totcol a { display: block; margin-top: 6px; font-size: 12px; color: var(--accent); }
   .row .name { font-size: 16px; }
-  .row .links { margin-top: 6px; }
+  .row .links { margin-top: 6px; flex-wrap: wrap; gap: 4px; }
+  .row .links a { padding: 2px 7px; }
+  .sheet .links { flex-wrap: wrap; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: #1a1d23; color: #fff;
+    padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: .2s; z-index: 60; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
   .walk { color: var(--accent); }
   .line { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px;
     border-radius: 99px; color: #fff; font-size: 11px; font-weight: 700; margin: 3px 3px 1px 0; }
@@ -566,6 +571,28 @@ function landUrl(g) {
   const name = g.kapt?.kaptName || g.apt.replace(/\(.*?\)/g, "").trim();
   return `https://m.land.naver.com/search/result/${encodeURIComponent(`${g.dong} ${name}`)}`;
 }
+// 호갱노노는 검색 주소로 바로, 아실·리치고는 단지명을 복사해 두고 사이트를 열어요 (검색창에 붙여넣기)
+const aptName = (g) => g.kapt?.kaptName || g.apt.replace(/\(.*?\)/g, "").trim();
+const hogangUrl = (g) => `https://hogangnono.com/search?q=${encodeURIComponent(`${g.dong} ${aptName(g)}`)}`;
+function linksHtml(g) {
+  return `<a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산</a>
+    <a href="${hogangUrl(g)}" target="_blank" rel="noopener">호갱노노</a>
+    <a href="https://asil.kr/asil/index.jsp" target="_blank" rel="noopener" data-copy="${esc(aptName(g))}">아실</a>
+    <a href="https://m.richgo.ai/pc" target="_blank" rel="noopener" data-copy="${esc(aptName(g))}">리치고</a>
+    <a href="${mapUrl(g)}" target="_blank" rel="noopener">지도</a>`;
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-copy]"); if (!a) return;
+  const t = a.dataset.copy;
+  try { navigator.clipboard?.writeText(t).catch(() => {}); } catch {}
+  toast(`'${t}' 복사했어요. 검색창에 붙여넣기 하세요`);
+});
+function toast(msg) {
+  let t = document.getElementById("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast"; document.body.appendChild(t); }
+  t.textContent = msg; t.className = "show";
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.className = "", 2600);
+}
 const mapUrl = (g) => `https://map.kakao.com/?q=${encodeURIComponent(`${g.gu} ${g.dong} ${g.apt}`)}`;
 
 function card(g) {
@@ -619,8 +646,7 @@ function card(g) {
         <span class="sm">${esc(g.gu)} ${esc(g.dong)} · 전용 ${g.sizes.join("·")}평</span>
         ${far ? `<span class="sm">${far}</span>` : ""}
         <div class="links">
-          <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산</a>
-          <a href="${mapUrl(g)}" target="_blank" rel="noopener">지도</a>
+          ${linksHtml(g)}
         </div>
       </div>
       <div class="cell c-price tr">${L("최근 실거래")}
@@ -690,8 +716,7 @@ function openReport(g) {
     <h3>${esc(g.apt)}</h3>
     <p class="meta" style="margin:4px 0 0">${esc(g.gu)} ${esc(g.dong)} ${esc(g.jibun)} · ${g.built}년 준공 · 전용 ${g.sizes.join("·")}평</p>
     <div class="links">
-      <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산</a>
-      <a href="${mapUrl(g)}" target="_blank" rel="noopener">지도</a>
+      ${linksHtml(g)}
     </div>
     <h4>점수 <span class="meta" style="font-weight:400">종합 ${s.total ?? "-"}점 · 등급 점수 ${gradeAvg(g) ?? "-"}점</span></h4>
     <div class="rgrid">${CATS.map((c) => `<div class="rbox"><div class="t"><span>${c.name} <span class="meta" style="font-weight:400">비중 ${weights[c.k]}</span></span>
