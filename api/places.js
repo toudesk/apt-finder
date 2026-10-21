@@ -33,15 +33,32 @@ export default async function handler(req, res) {
     }
     if (!pos) return res.status(200).json({ found: false });
 
-    const near = { x: pos.x, y: pos.y, sort: "distance" };
-    const [sub, mart, dept] = await Promise.all([
-      call("search/category.json", { ...near, category_group_code: "SW8", radius: "3000", size: "1" }),
-      call("search/category.json", { ...near, category_group_code: "MT1", radius: "3000", size: "1" }),
-      call("search/keyword.json", { ...near, query: "백화점", radius: "3000", size: "15" }),
+    const near = { x: pos.x, y: pos.y, radius: "3000" };
+    // 최대 3쪽(45곳)까지 모아요
+    const all = async (path, params) => {
+      const out = [];
+      for (let page = 1; page <= 3; page++) {
+        const r = await call(path, { ...params, size: "15", page: String(page) });
+        out.push(...(r.documents || []));
+        if (r.meta?.is_end) break;
+      }
+      return out;
+    };
+    const [sub, martDocs, deptDocs] = await Promise.all([
+      call("search/category.json", { ...near, sort: "distance", category_group_code: "SW8", size: "1" }),
+      all("search/category.json", { ...near, sort: "distance", category_group_code: "MT1" }),
+      all("search/keyword.json", { ...near, sort: "accuracy", query: "백화점" }),
     ]);
 
     const st = sub.documents?.[0];
-    const depts = (dept.documents || []).filter((d) => /백화점$/.test(d.category_name));
+    // 카카오 '대형마트' 분류에는 동네 슈퍼도 섞여 있어서, 큰 마트 브랜드만 세요
+    const BIG = /(이마트|홈플러스|롯데마트|코스트코|트레이더스|하나로마트|메가마트|빅마켓|농협하나로)/;
+    const SMALL = /(에브리데이|익스프레스|365|24)/;
+    const marts = new Set(
+      martDocs.filter((d) => BIG.test(d.place_name) && !SMALL.test(d.place_name)).map((d) => d.id)
+    );
+    // 백화점 안의 매장들은 빼고, 분류가 '백화점'인 본점·지점만 세요
+    const depts = new Set(deptDocs.filter((d) => /백화점$/.test(d.category_name)).map((d) => d.id));
 
     // 결과는 오래 저장해 둬요 (역·마트 위치는 거의 안 바뀌니까요)
     res.setHeader("Cache-Control", "s-maxage=2592000, stale-while-revalidate=2592000");
@@ -55,8 +72,8 @@ export default async function handler(req, res) {
             walkMin: Math.max(1, Math.round((Number(st.distance) * 1.3) / 67)),
           }
         : null,
-      marts: mart.meta?.total_count ?? 0,
-      depts: depts.length,
+      marts: marts.size,
+      depts: depts.size,
     });
   } catch (e) {
     return res.status(502).json({ error: e.message });
