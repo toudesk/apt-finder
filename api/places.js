@@ -75,6 +75,7 @@ export default async function handler(req, res) {
     const depts = new Set(deptDocs.filter((d) => /백화점$/.test(d.category_name)).map((d) => d.id));
 
     // 주변 아파트 단지 수: '아파트' 분류만, 'OO아파트 101동'·상가·관리사무소 같은 건 빼고, 같은 단지는 한 번만 세요
+    if (req.query.debug === "apts") return res.status(200).json((aptDocs || []).map((d) => [d.place_name, d.distance, d.category_name]));
     let apts = null;
     if (aptDocs) {
       const NOT = /(상가|관리|경비|어린이집|유치원|놀이터|정문|후문|주차|노인정|경로당|커뮤니티|피트니스|분양|모델하우스|부동산)/;
