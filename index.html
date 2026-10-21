@@ -197,8 +197,8 @@ drawGus();
 // ---- 점수 기준 ----
 const CATS = [
   { k: "traffic", name: "교통", desc: "역까지 걷는 시간 + 출근 시간(입력했을 때)" },
-  { k: "life",    name: "생활", desc: "3km 안 큰 마트·백화점 수" },
-  { k: "school",  name: "학군", desc: "가장 가까운 중학교까지 거리" },
+  { k: "life",    name: "생활", desc: "3km 안 큰 마트(8곳 만점)·백화점(3곳 만점) 수" },
+  { k: "school",  name: "학군", desc: "가장 가까운 중학교까지 거리 (150m 만점 ~ 1km 0점)" },
   { k: "price",   name: "가격", desc: "같은 결과 안에서 평당 가격이 쌀수록 높음" },
   { k: "fresh",   name: "신축", desc: "준공 연차가 짧을수록 높음" },
 ];
@@ -220,17 +220,18 @@ function scoreOf(g) {
   else if (p) parts.push(0);
   if (g.commute && g.commute.found) parts.push(lerp(g.commute.minutes, 30, 80));
   s.traffic = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
-  // 생활: 큰 마트 4곳이면 만점(60%), 백화점 2곳이면 만점(40%)
-  s.life = p ? Math.min(p.marts, 4) / 4 * 60 + Math.min(p.depts, 2) / 2 * 40 : null;
-  // 학군: 중학교 300m 이내 100 ~ 1.5km 0
-  s.school = p ? (p.school ? lerp(p.school.meters, 300, 1500) : 0) : null;
+  // 생활: 큰 마트 8곳이면 만점(60%), 백화점 3곳이면 만점(40%)
+  s.life = p ? Math.min(p.marts, 8) / 8 * 60 + Math.min(p.depts, 3) / 3 * 40 : null;
+  // 학군: 중학교 150m 이내 100 ~ 1km 0
+  s.school = p ? (p.school ? lerp(p.school.meters, 150, 1000) : 0) : null;
   // 가격: 결과 안에서 평당가 순위
   s.price = g.priceRank;
   // 신축: 5년차 이하 100 ~ 40년차 0
   s.fresh = lerp(year - g.built + 1, 5, 40);
   let sum = 0, w = 0;
   for (const c of CATS) if (s[c.k] != null && weights[c.k] > 0) { sum += s[c.k] * weights[c.k]; w += weights[c.k]; }
-  s.total = w ? Math.round(sum / w) : null;
+  // 주변 정보를 못 찾은 단지는 종합 점수를 매기지 않아요 (가격·신축만으로 높게 나오는 걸 막으려고)
+  s.total = p && w ? Math.round(sum / w) : null;
   return s;
 }
 const grade = (v) => v == null ? "-" : v >= 85 ? "S" : v >= 70 ? "A" : v >= 50 ? "B" : "C";
@@ -305,8 +306,7 @@ function build(lists) {
   workPlace = $("work").value.trim();
   openIds.clear();
   renderAll();
-  loadPlaces();
-  loadCommute();
+  loadPlaces().then(() => { renderAll(); loadCommute(); });
 }
 
 // ---- 화면 그리기 ----
@@ -400,7 +400,7 @@ function renderList() {
   $("sort").value = sortBy;
   $("sort").onchange = (e) => { sortBy = e.target.value; renderList(); };
   document.querySelectorAll(".apt-head").forEach((h) => h.onclick = (e) => {
-    if (e.target.closest("a")) return;
+    if (e.target.closest("a, [data-ask]")) return;
     const id = +h.parentElement.dataset.id;
     openIds.has(id) ? openIds.delete(id) : openIds.add(id);
     h.parentElement.classList.toggle("open");
@@ -472,23 +472,47 @@ function loadPlaces() {
 const ride = (g) => (g.commute?.found ? g.commute.minutes : 9999);
 function commuteHtml(g) {
   const c = g.commute;
-  if (c === undefined) return `<span class="muted">${esc(workPlace)}까지 출근 시간 계산 중…</span>`;
+  if (c === "wait") return `<span class="muted">${esc(workPlace)}까지 출근 시간 계산 중…</span>`;
+  if (c === undefined) return `<span class="muted">${esc(workPlace)}까지 출근 시간</span> <a href="#" class="ask" data-ask="${g.id}">계산하기</a>`;
   if (c.quota) return `<span class="muted">오늘 출근 시간 무료 조회량을 다 썼어요. 내일 다시 볼 수 있어요.</span>`;
   if (!c.found) return c.none ? "" : `<span class="muted">${esc(workPlace)}까지 대중교통 경로를 찾지 못했어요</span>`;
   const tr = c.transfers == null ? "" : c.transfers === 0 ? " · 환승 없음" : ` · 환승 ${c.transfers}회`;
   return `<span>${esc(c.dest || workPlace)}까지 대중교통 <b>약 ${c.minutes}분</b>${tr}</span>`;
 }
+// 카카오 대중교통 무료 조회량이 넉넉하지 않아서, 결과를 이 브라우저에 30일 기억해 두고
+// 처음에는 종합 점수 상위 AUTO_N개 단지만 자동으로 계산해요. 나머지는 '계산하기'를 누르면 해요.
+const AUTO_N = 20;
+const DAY = 86400000;
+let quotaHit = false;
+async function fetchCommute(g) {
+  const key = `c:${addrOf(g)}|${g.apt}|${workPlace}`;
+  const hit = store.get(key, null);
+  if (hit && Date.now() - hit.t < 30 * DAY) { g.commute = hit.d; return; }
+  if (quotaHit) { g.commute = { quota: true }; return; }
+  g.commute = "wait"; scheduleRender();
+  try {
+    g.commute = await (await fetch(`/api/commute?addr=${encodeURIComponent(addrOf(g))}&name=${encodeURIComponent(g.apt)}&to=${encodeURIComponent(workPlace)}`)).json();
+  } catch { g.commute = { found: false }; }
+  if (g.commute.quota) quotaHit = true;
+  else if (g.commute.found || g.commute.reason) store.set(key, { t: Date.now(), d: g.commute });
+}
 function loadCommute() {
   if (!workPlace) return;
-  let stopped = false;
-  return runQueue(groups, 4, async (g) => {
-    if (stopped) { g.commute = { quota: true }; return; }
-    try {
-      g.commute = await (await fetch(`/api/commute?addr=${encodeURIComponent(addrOf(g))}&name=${encodeURIComponent(g.apt)}&to=${encodeURIComponent(workPlace)}`)).json();
-    } catch { g.commute = { found: false }; }
-    if (g.commute.quota) { stopped = true; groups.forEach((x) => { if (x.commute === undefined) x.commute = { quota: true }; }); return "stop"; }
-  });
+  quotaHit = false;
+  const top = [...groups].sort((a, b) => (b.s?.total ?? -1) - (a.s?.total ?? -1)).slice(0, AUTO_N);
+  // 이미 기억해 둔 결과는 전부 바로 채워요 (조회량 안 씀)
+  for (const g of groups) {
+    const hit = store.get(`c:${addrOf(g)}|${g.apt}|${workPlace}`, null);
+    if (hit && Date.now() - hit.t < 30 * DAY) g.commute = hit.d;
+  }
+  return runQueue(top.filter((g) => g.commute === undefined), 3, async (g) => { await fetchCommute(g); if (quotaHit) return "stop"; });
 }
+document.addEventListener("click", async (e) => {
+  const a = e.target.closest("[data-ask]"); if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  const g = groups.find((x) => x.id === +a.dataset.ask);
+  if (g) { await fetchCommute(g); scheduleRender(); }
+});
 
 // ---- 앱처럼 설치 (서비스 워커 등록) ----
 if ("serviceWorker" in navigator) {
