@@ -17,25 +17,14 @@ export default async function handler(req, res) {
   const name = String(req.query.name || "").slice(0, 60);
   if (!/^\d{5}$/.test(gu) || !name) return res.status(400).json({ error: "구 코드와 단지 이름이 필요해요." });
 
-  if (req.query.debug) {
-    // 점검용: 단지 목록 API가 어떻게 응답하는지 그대로 보여줘요 (키는 보여주지 않아요)
-    const out = {};
-    for (const [op, params] of [
-      ["getSigunguAptList4", { sigunguCode: gu }],
-      ["getLegaldongAptList4", { bjdCode: `${gu}10600` }],
-    ]) {
-      const r = await fetch(`https://apis.data.go.kr/1613000/AptListService4/${op}?${new URLSearchParams({ serviceKey: key, numOfRows: "3", pageNo: "1", ...params })}`);
-      out[op] = { status: r.status, body: (await r.text()).slice(0, 700) };
-    }
-    return res.status(200).json(out);
-  }
   try {
     const list = await getList(key, gu);
     const hit = match(list, dong, name);
     if (!hit) return res.status(200).json({ found: false });
 
-    const xml = await get(`${BASIS}?${new URLSearchParams({ serviceKey: key, kaptCode: hit.kaptCode })}`);
-    const n = (k) => parseInt(tag(xml, k), 10) || null;
+    const body = await get(`${BASIS}?${new URLSearchParams({ serviceKey: key, kaptCode: hit.kaptCode })}`);
+    const item = Array.isArray(body.item) ? body.item[0] : body.item || (body.items && [].concat(body.items.item || body.items)[0]) || {};
+    const n = (k) => parseInt(item[k], 10) || null;
     res.setHeader("Cache-Control", "s-maxage=2592000, stale-while-revalidate=2592000");
     return res.status(200).json({
       found: true,
@@ -53,24 +42,28 @@ async function getList(key, gu) {
   if (listCache.has(gu)) return listCache.get(gu);
   const out = [];
   for (let page = 1; page <= 5; page++) {
-    const xml = await get(`${LIST}?${new URLSearchParams({ serviceKey: key, sigunguCode: gu, numOfRows: "1000", pageNo: String(page) })}`);
-    const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => m[1]);
-    for (const it of items) out.push({ kaptCode: tag(it, "kaptCode"), kaptName: tag(it, "kaptName"), dong: tag(it, "as3") });
-    const total = parseInt(tag(xml, "totalCount") || "0", 10);
+    const body = await get(`${LIST}?${new URLSearchParams({ serviceKey: key, sigunguCode: gu, numOfRows: "1000", pageNo: String(page) })}`);
+    const items = [].concat(body.items?.item || body.items || []);
+    for (const it of items) out.push({ kaptCode: it.kaptCode, kaptName: String(it.kaptName || "").trim(), dong: it.as3 });
+    const total = parseInt(body.totalCount || "0", 10);
     if (!items.length || page * 1000 >= total) break;
   }
   listCache.set(gu, out);
   return out;
 }
 
+// 이 API는 JSON으로 답해요: { response: { header: {resultCode}, body: {...} } }
 async function get(url) {
   const r = await fetch(url);
-  const xml = await r.text();
-  const code = tag(xml, "resultCode");
-  if (!r.ok || (code && code !== "00" && code !== "000")) {
-    throw new Error(`공동주택 정보 API 오류: ${tag(xml, "resultMsg") || r.status}`);
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch {}
+  const resp = data?.response || data || {};
+  const code = resp.header?.resultCode;
+  if (!r.ok || !data || (code && code !== "00" && code !== "000")) {
+    throw new Error(`공동주택 정보 API 오류: ${resp.header?.resultMsg || r.status}`);
   }
-  return xml;
+  return resp.body || {};
 }
 
 // ---- 이름 맞추기: 실거래가의 단지명과 K-apt 단지명은 표기가 조금씩 달라요 ----
@@ -102,9 +95,4 @@ function match(list, dong, name) {
     return bestS >= 0.6 ? best : null;
   };
   return pick(list.filter((c) => c.dong === dong)) || pick(list);
-}
-
-function tag(xml, name) {
-  const m = xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
-  return m ? m[1].trim() : "";
 }
