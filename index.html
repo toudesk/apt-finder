@@ -480,6 +480,11 @@ function renderList() {
   });
 }
 
+// 네이버 부동산 검색으로 바로 가요. K-apt 단지명(예: 상계주공7단지)이 있으면 그걸로, 없으면 괄호를 뗀 이름으로 찾아요.
+function landUrl(g) {
+  const name = g.kapt?.kaptName || g.apt.replace(/\(.*?\)/g, "").trim();
+  return `https://m.land.naver.com/search/result/${encodeURIComponent(`${g.dong} ${name}`)}`;
+}
 function card(g) {
   const s = g.s, p = g.place && g.place.found ? g.place : null;
   const q = encodeURIComponent(`${g.gu} ${g.dong} ${g.apt} 아파트`);
@@ -512,7 +517,7 @@ function card(g) {
         <div class="name">${esc(g.apt)}</div>
         <span class="sm">${esc(g.gu)} ${esc(g.dong)} · 전용 ${g.sizes.join("·")}평</span>
         <div class="links">
-          <a href="https://search.naver.com/search.naver?query=${q}%20%EB%A7%A4%EB%AC%BC" target="_blank" rel="noopener">네이버 매물</a>
+          <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산</a>
           <a href="https://map.kakao.com/?q=${encodeURIComponent(`${g.gu} ${g.dong} ${g.apt}`)}" target="_blank" rel="noopener">지도</a>
         </div>
       </div>
