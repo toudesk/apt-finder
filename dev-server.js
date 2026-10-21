@@ -2,11 +2,12 @@
 // 실행: node dev-server.js  →  http://localhost:3000
 import http from "node:http";
 import { readFile } from "node:fs/promises";
-import handler from "./api/trades.js";
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
-  if (url.pathname === "/api/trades") {
+  const m = url.pathname.match(/^\/api\/(\w+)$/);
+  if (m) {
+    const { default: handler } = await import(`./api/${m[1]}.js`);
     req.query = Object.fromEntries(url.searchParams);
     res.status = (c) => { res.statusCode = c; return res; };
     res.json = (o) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(o)); };

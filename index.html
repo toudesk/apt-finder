@@ -49,6 +49,9 @@
   th, td { padding: 7px 4px; text-align: left; border-bottom: 1px solid var(--line); }
   th { color: var(--sub); font-weight: 500; font-size: 12px; }
   td.r, th.r { text-align: right; }
+  .near { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 13px; color: var(--text); }
+  .near .muted { color: var(--sub); }
+  .near b { font-weight: 500; }
   .empty { text-align: center; color: var(--sub); padding: 40px 0; }
   footer { margin-top: 30px; font-size: 12px; color: var(--sub); }
 </style>
@@ -140,7 +143,7 @@ function build(trades) {
   const map = new Map();
   for (const t of ok) {
     const k = `${t.apt}|${t.dong}|${t.jibun}`;
-    if (!map.has(k)) map.set(k, { apt: t.apt, dong: t.dong, built: t.built, deals: [] });
+    if (!map.has(k)) map.set(k, { id: map.size, apt: t.apt, dong: t.dong, jibun: t.jibun, built: t.built, deals: [] });
     map.get(k).deals.push(t);
   }
   groups = [...map.values()].map((g) => {
@@ -152,6 +155,7 @@ function build(trades) {
     return g;
   });
   render("count");
+  loadPlaces();
 }
 
 function render(sort) {
@@ -161,6 +165,7 @@ function render(sort) {
     high: (a, b) => b.latest.price - a.latest.price,
     new: (a, b) => b.built - a.built,
     recent: (a, b) => b.latest.date.localeCompare(a.latest.date),
+    station: (a, b) => walk(a) - walk(b),
   };
   groups.sort(sorters[sort]);
   const guName = $("gu").selectedOptions[0].text;
@@ -179,6 +184,7 @@ function render(sort) {
         <option value="low">가격 낮은 순</option>
         <option value="high">가격 높은 순</option>
         <option value="new">신축 순</option>
+        <option value="station">역 가까운 순</option>
       </select>
     </div>
     ${groups.map((g, i) => `
@@ -191,6 +197,7 @@ function render(sort) {
               <span class="chip">거래 ${g.deals.length}건</span>
               <span class="chip">전용 ${g.sizes.join("·")}평</span>
             </div>
+            <div class="near" id="near-${g.id}">${nearHtml(g)}</div>
           </div>
           <div class="price">
             <b>${won(g.latest.price)}</b>
@@ -208,6 +215,40 @@ function render(sort) {
   $("sort").value = sort;
   $("sort").onchange = (e) => render(e.target.value);
   document.querySelectorAll(".apt-head").forEach((h) => h.onclick = () => h.parentElement.classList.toggle("open"));
+}
+
+// ---- 2단계: 카카오맵 주변 정보 ----
+const walk = (g) => g.place?.station ? g.place.station.walkMin : 999;
+
+function nearHtml(g) {
+  const p = g.place;
+  if (p === undefined) return `<span class="muted">주변 정보 불러오는 중…</span>`;
+  if (!p || p.none || p.error || !p.found) return p?.none ? "" : `<span class="muted">주변 정보를 찾지 못했어요</span>`;
+  const st = p.station
+    ? `<span><b>${esc(p.station.name)}</b> 도보 약 ${p.station.walkMin}분</span>`
+    : `<span class="muted">3km 안 지하철역 없음</span>`;
+  return `${st}<span>대형마트 <b>${p.marts}</b> · 백화점 <b>${p.depts}</b> <span class="muted">(3km 안)</span></span>`;
+}
+
+let loadToken = 0;
+async function loadPlaces() {
+  const token = ++loadToken; // 새로 검색하면 이전 불러오기는 멈춰요
+  const guName = $("gu").selectedOptions[0].text;
+  const queue = [...groups];
+  const worker = async () => {
+    while (queue.length && token === loadToken) {
+      const g = queue.shift();
+      try {
+        const addr = `서울 ${guName} ${g.dong} ${g.jibun}`.trim();
+        const r = await fetch(`/api/places?addr=${encodeURIComponent(addr)}&name=${encodeURIComponent(g.apt)}`);
+        g.place = await r.json();
+      } catch { g.place = { error: true }; }
+      if (token !== loadToken) return;
+      const el = document.getElementById(`near-${g.id}`);
+      if (el) el.innerHTML = nearHtml(g);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
 }
 </script>
 </body>
