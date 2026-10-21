@@ -549,8 +549,9 @@ function renderList() {
     sortBy = on ? "traffic" : "score"; gradeFilter.traffic = on ? 2 : 0;
     const sel = document.querySelector('[data-gf="traffic"]'); if (sel) sel.value = String(gradeFilter.traffic);
     renderAll();
+    if (on) loadCommute(true);
   };
-  $("sort").onchange = (e) => { sortBy = e.target.value; renderList(); };
+  $("sort").onchange = (e) => { sortBy = e.target.value; renderList(); if (sortBy === "traffic") loadCommute(true); };
   $("result").querySelectorAll("[data-clear]").forEach((a) => a.onclick = (e) => {
     e.preventDefault();
     const k = a.dataset.clear;
@@ -571,7 +572,7 @@ const ACH_NOTE = "지표: 교과별 학업성취 사항(성취도 A~E 비율) ·
 function trafficWhy(g) {
   const s = g.s; if (!s) return "";
   const w = g.place?.station ? `역 도보 ${g.place.station.walkMin}분 → ${Math.round(s.tWalk)}점` : s.tWalk != null ? "역 없음 → 0점" : "";
-  const r = s.tRide != null ? ` / 출근 평균 ${avgRide(g)}분 → ${Math.round(s.tRide)}점` : " / 출근 시간 계산 전";
+  const r = s.tRide != null ? ` / 출근 평균 ${avgRide(g)}분 → ${Math.round(s.tRide)}점` : works.length ? " / 출근 시간 계산 전이라 역 도보만 반영" : "";
   return w ? ` (${w}${r})` : "";
 }
 function listingNone(g) {
@@ -991,12 +992,13 @@ async function fetchCommute(g, w) {
   if (r.quota) quotaHit = true;
   else if (r.found || r.reason) store.set(cKey(g, w), { t: Date.now(), d: r });
 }
-function loadCommute() {
+function loadCommute(byTraffic) {
   if (!works.length) return;
   quotaHit = false;
   // 이미 기억해 둔 결과는 전부 바로 채워요 (조회량 안 씀)
   for (const g of groups) for (const w of works) { const h = cached(g, w); if (h) (g.commutes = g.commutes || {})[w] = h; }
-  const top = [...groups].sort((a, b) => (b.s?.total ?? -1) - (a.s?.total ?? -1)).slice(0, AUTO_N);
+  const key = byTraffic ? "traffic" : "total"; // '교통 좋은 순'일 땐 교통 점수 상위 단지부터 출근 시간 계산
+  const top = [...groups].sort((a, b) => (b.s?.[key] ?? -1) - (a.s?.[key] ?? -1)).slice(0, AUTO_N);
   const jobs = [];
   for (const g of top) for (const w of works) if (g.commutes?.[w] === undefined) jobs.push({ g, w });
   return runQueue(jobs, 3, async ({ g, w }) => { await fetchCommute(g, w); if (quotaHit) return "stop"; });
