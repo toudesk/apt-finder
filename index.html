@@ -240,8 +240,9 @@ function scoreOf(g) {
   // 신축: 5년차 이하 100 ~ 40년차 0
   s.fresh = lerp(year - g.built + 1, 5, 40);
   // 규모: 건축물대장 세대수 (1,000세대 이상 100 ~ 100세대 0)
+  // K-apt(공동주택관리정보시스템)는 보통 150세대 이상 단지만 등록돼 있어서, 못 찾으면 소규모 단지로 봐요
   const hh = g.kapt?.households;
-  s.size = hh ? lerp(hh, 1000, 100) : null;
+  s.size = hh ? lerp(hh, 1000, 100) : g.kapt?.found === false ? 0 : null;
   let sum = 0, w = 0;
   for (const c of CATS) if (s[c.k] != null && weights[c.k] > 0) { sum += s[c.k] * weights[c.k]; w += weights[c.k]; }
   // 주변 정보를 못 찾은 단지는 종합 점수를 매기지 않아요 (가격·신축만으로 높게 나오는 걸 막으려고)
@@ -394,7 +395,7 @@ function renderList() {
   };
   if (!groups.length) { $("result").innerHTML = `<p class="empty">조건에 맞는 거래가 없어요. 예산이나 기간을 넓혀 보세요.</p>`; return; }
   const minHH = +$("hh").value;
-  const hhOf = (g) => g.kapt?.households;
+  const hhOf = (g) => g.kapt?.households ?? (g.kapt?.found === false ? 0 : null);
   let list = groups.filter((g) =>
     (!guFilter || g.gu === guFilter) &&
     (!minHH || hhOf(g) == null || hhOf(g) >= minHH) &&
@@ -465,6 +466,7 @@ function card(g) {
 function bldHtml(g) {
   const parts = [];
   if (g.kapt?.households) parts.push(`${g.kapt.households.toLocaleString()}세대`);
+  else if (g.kapt?.found === false) parts.push(`소규모 단지(관리정보 미등록)`);
   const b = g.place?.building;
   if (b && !b.error && b.far) { parts.push(`용적률 ${b.far}%`); if (b.bcr) parts.push(`건폐율 ${b.bcr}%`); }
   return parts.length ? " · " + parts.join(" · ") : "";
