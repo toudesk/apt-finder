@@ -22,7 +22,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 16px 60px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 60px; }
   h1 { font-size: 24px; margin: 0 0 4px; }
   .lead { color: var(--sub); margin: 0 0 20px; }
 
@@ -101,6 +101,54 @@
   .breakdown { font-size: 13px; color: var(--sub); margin: 8px 0 4px; }
   .empty { text-align: center; color: var(--sub); padding: 40px 0; }
   footer { margin-top: 30px; font-size: 12px; color: var(--sub); }
+
+  /* ---- 단지 표 ---- */
+  .tbl { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .cols { display: grid; gap: 14px; align-items: start;
+    grid-template-columns: 92px minmax(170px, 1.5fr) 130px 108px minmax(150px, 1.2fr) 92px minmax(120px, 1fr); }
+  .thead { position: sticky; top: 0; z-index: 2; background: #fafbfc; border-bottom: 1px solid var(--line);
+    padding: 10px 16px; font-size: 12px; color: var(--sub); font-weight: 500; }
+  .thead small { display: block; font-weight: 400; font-size: 11px; color: #9ca3af; }
+  .row { border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row-main { padding: 14px 16px; cursor: pointer; }
+  .row-main:hover { background: #fafbfc; }
+  .cell { font-size: 13px; min-width: 0; }
+  .cell .big { font-size: 15px; font-weight: 700; display: block; }
+  .cell .sm { font-size: 12px; color: var(--sub); display: block; }
+  .cell .lbl { display: none; }
+  .scorebox { text-align: center; }
+  .scorebox b { display: block; font-size: 26px; line-height: 1.1; }
+  .scorebox .sm { margin-bottom: 6px; }
+  .gmini { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; }
+  .gmini .g { white-space: nowrap; }
+  .gmini .g { font-size: 10.5px; padding: 1px 0; text-align: center; }
+  .row .name { font-size: 15px; }
+  .row .links { margin-top: 6px; }
+  .tr { text-align: right; }
+  .row .deals { display: none; border-top: 1px dashed var(--line); padding: 6px 16px 12px; background: #fcfcfd; }
+  .row.open .deals { display: block; }
+  .muted { color: var(--sub); }
+
+  @media (max-width: 900px) {
+    .thead { display: none; }
+    .cols { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; }
+    .cell-score { grid-column: 1; }
+    .cell-name { grid-column: 2 / span 2; }
+    .cell-price { grid-column: 4; text-align: left; }
+    .gmini { grid-template-columns: repeat(2, 1fr); }
+    .scorebox { text-align: left; }
+    .cell .lbl { display: block; font-size: 11px; color: #9ca3af; margin-bottom: 1px; }
+    .cell-traffic, .cell-life, .cell-school, .cell-size { background: #f8f9fb; border-radius: 10px; padding: 8px 10px; }
+    .tr { text-align: left; }
+  }
+  @media (max-width: 480px) {
+    .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cell-score, .cell-name, .cell-price { grid-column: 1 / -1; grid-row: auto; }
+    .scorebox { display: flex; align-items: center; gap: 10px; }
+    .scorebox .gmini { flex: 1; grid-template-columns: repeat(3, 1fr); }
+    .cell-price .sm { display: inline; margin-right: 6px; }
+  }
 
   @media (max-width: 560px) {
     .apt-head { grid-template-columns: auto 1fr; }
@@ -416,10 +464,15 @@ function renderList() {
         ${workPlace ? `<option value="commute">출근 짧은 순</option>` : ""}
       </select>
     </div>
-    ${list.length ? list.map(card).join("") : `<p class="empty">이 등급 조건에 맞는 단지가 없어요.</p>`}`;
+    ${list.length ? `<div class="tbl">
+      <div class="thead cols">
+        <div>점수<small>종합 · 등급</small></div><div>단지<small>위치 · 크기</small></div>
+        <div class="tr">최근 실거래<small>날짜 · 층 · 평</small></div><div>준공 · 규모<small>세대수 · 용적률</small></div>
+        <div>교통<small>가까운 역${workPlace ? " · 출근" : ""}</small></div><div>생활<small>3km 안</small></div><div>학군<small>가까운 중학교</small></div>
+      </div>${list.map(card).join("")}</div>` : `<p class="empty">이 등급 조건에 맞는 단지가 없어요.</p>`}`;
   $("sort").value = sortBy;
   $("sort").onchange = (e) => { sortBy = e.target.value; renderList(); };
-  document.querySelectorAll(".apt-head").forEach((h) => h.onclick = (e) => {
+  document.querySelectorAll(".row-main").forEach((h) => h.onclick = (e) => {
     if (e.target.closest("a, [data-ask]")) return;
     const id = +h.parentElement.dataset.id;
     openIds.has(id) ? openIds.delete(id) : openIds.add(id);
@@ -428,29 +481,50 @@ function renderList() {
 }
 
 function card(g) {
-  const s = g.s;
+  const s = g.s, p = g.place && g.place.found ? g.place : null;
   const q = encodeURIComponent(`${g.gu} ${g.dong} ${g.apt} 아파트`);
+  const loading = `<span class="muted">…</span>`;
+  // 교통
+  let traffic = g.place === undefined ? loading : !p ? `<span class="muted">정보 없음</span>`
+    : p.station ? `<span class="big">${esc(p.station.name.replace(/ \S+선$/, ""))} ${p.station.walkMin}분</span><span class="sm">${esc((p.station.name.match(/\S+선$/) || [""])[0])} · 도보 ${p.station.meters.toLocaleString()}m</span>`
+    : `<span class="muted">3km 안 역 없음</span>`;
+  if (workPlace) {
+    const c = g.commute;
+    traffic += `<span class="sm" style="margin-top:4px">${c && c.found
+      ? `출근 ${esc((c.dest || workPlace).replace(/ \S+선$/, ""))} <b>${c.minutes}분</b>${c.transfers != null ? ` · 환승 ${c.transfers}` : ""}`
+      : commuteHtml(g)}</span>`;
+  }
+  // 생활
+  const life = g.place === undefined ? loading : !p ? "-" : `<span>마트 <b>${p.marts}</b></span><span class="sm">백화점 ${p.depts}</span>`;
+  // 학군
+  const school = g.place === undefined ? loading : !p ? "-" : p.school
+    ? `<span>${esc(p.school.name)}</span><span class="sm">${p.school.meters.toLocaleString()}m</span>` : `<span class="muted">3km 안 없음</span>`;
+  // 준공·규모
+  const hh = g.kapt?.households ? `${g.kapt.households.toLocaleString()}세대` : g.kapt?.found === false ? "소규모" : g.kapt ? "…" : "";
+  const b = g.place?.building;
+  const far = b && !b.error && b.far ? `용적률 ${b.far}%` : "";
   return `
-  <div class="apt ${openIds.has(g.id) ? "open" : ""}" data-id="${g.id}">
-    <div class="apt-head">
-      <div class="score"><b>${s.total ?? "…"}</b><span>종합 점수</span></div>
-      <div>
+  <div class="row ${openIds.has(g.id) ? "open" : ""}" data-id="${g.id}">
+    <div class="row-main cols">
+      <div class="cell cell-score scorebox"><b>${s.total ?? "…"}</b><span class="sm">종합 점수</span>
+        <div class="gmini">${CATS.map((c) => badge(c.name, s[c.k])).join("")}</div></div>
+      <div class="cell cell-name">
         <div class="name">${esc(g.apt)}</div>
-        <div class="meta">${esc(g.gu)} ${esc(g.dong)} · ${g.built}년 준공 (${year - g.built + 1}년차)${bldHtml(g)}</div>
-        <div class="chips">${CATS.map((c) => badge(c.name, s[c.k])).join("")}</div>
-        <div class="near">${nearHtml(g)}</div>
-        ${workPlace ? `<div class="near">${commuteHtml(g)}</div>` : ""}
+        <span class="sm">${esc(g.gu)} ${esc(g.dong)} · 전용 ${g.sizes.join("·")}평</span>
         <div class="links">
-          <a href="https://search.naver.com/search.naver?query=${q}%20%EB%A7%A4%EB%AC%BC" target="_blank" rel="noopener">네이버 매물 검색</a>
+          <a href="https://search.naver.com/search.naver?query=${q}%20%EB%A7%A4%EB%AC%BC" target="_blank" rel="noopener">네이버 매물</a>
           <a href="https://map.kakao.com/?q=${encodeURIComponent(`${g.gu} ${g.dong} ${g.apt}`)}" target="_blank" rel="noopener">지도</a>
         </div>
       </div>
-      <div class="price">
-        <b>${won(g.latest.price)}</b>
-        <span>최근 ${g.latest.date.slice(5).replace("-", ".")} · 거래 ${g.deals.length}건</span><br/>
-        <span>${g.low === g.high ? "" : `${won(g.low)} ~ ${won(g.high)}`}</span><br/>
-        <span>전용 ${g.sizes.join("·")}평</span>
-      </div>
+      <div class="cell cell-price tr"><span class="lbl">최근 실거래</span>
+        <span class="big">${won(g.latest.price)}</span>
+        <span class="sm">${g.latest.date.slice(2).replace(/-/g, ".")} · ${g.latest.floor}층 · ${pyeong(g.latest.area)}평</span>
+        ${g.low === g.high ? "" : `<span class="sm">${won(g.low)}~${won(g.high)}</span>`}<span class="sm">거래 ${g.deals.length}건</span></div>
+      <div class="cell cell-size"><span class="lbl">준공 · 규모</span>
+        <span class="big">${g.built}</span><span class="sm">${year - g.built + 1}년차${hh ? " · " + hh : ""}</span>${far ? `<span class="sm">${far}</span>` : ""}</div>
+      <div class="cell cell-traffic"><span class="lbl">교통</span>${traffic}</div>
+      <div class="cell cell-life"><span class="lbl">생활 (3km)</span>${life}</div>
+      <div class="cell cell-school"><span class="lbl">가까운 중학교</span>${school}</div>
     </div>
     <div class="deals">
       <p class="breakdown">${CATS.map((c) => `${c.name} ${s[c.k] == null ? "계산 중" : Math.round(s[c.k]) + "점"}`).join(" · ")}</p>
