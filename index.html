@@ -407,8 +407,8 @@ function build(lists) {
   store.set("work", $("work").value);
   openIds.clear();
   renderAll();
-  loadComplex();
-  loadPlaces().then(() => { renderAll(); loadCommute(); });
+  const places = loadPlaces().then(() => { renderAll(); loadCommute(); });
+  Promise.all([loadComplex(), places]).then(loadNearHH);
 }
 
 // ---- 화면 그리기 ----
@@ -476,6 +476,7 @@ function renderList() {
     high: (a, b) => b.latest.price - a.latest.price,
     new: (a, b) => b.built - a.built,
     hh: (a, b) => (b.kapt?.households ?? 0) - (a.kapt?.households ?? 0),
+    nearhh: (a, b) => (b.nearHH?.sum ?? -1) - (a.nearHH?.sum ?? -1),
     recent: (a, b) => b.latest.date.localeCompare(a.latest.date),
     station: (a, b) => walk(a) - walk(b),
     commute: (a, b) => ride(a) - ride(b),
@@ -508,6 +509,7 @@ function renderList() {
         <option value="recent">최근 거래 순</option>
         <option value="new">신축 순</option>
         <option value="hh">세대수 많은 순</option>
+        <option value="nearhh">주변 세대수 많은 순</option>
         <option value="station">역 가까운 순</option>
         ${works.length ? `<option value="commute">출근 짧은 순</option>` : ""}
       </select>
@@ -521,7 +523,7 @@ function renderList() {
         <div>가까운 역<small>도보 · 노선</small></div>
         <div class="tr">출근 대중교통<small>${works.length ? esc(works.map(short).join(" · ")) : "출근지 없음"}</small></div>
         <div class="tr">3km 내<small>백화점 · 마트</small></div>
-        <div class="tr">주변 아파트<small>500m · 1km 단지</small></div>
+        <div class="tr">주변 아파트<small>500m 단지 · 1km 세대수</small></div>
         <div>가까운 중학교<small>거리</small></div>
       </div>${list.map(card).join("")}</div>` : `<p class="empty">이 조건에 맞는 단지가 없어요.</p>`}`;
   $("sort").value = sortBy;
@@ -625,7 +627,10 @@ function card(g) {
   const life = waiting ? loading : !p ? none() : `<div class="rides"><div><span class="muted">백화점</span><b class="num">${p.depts}</b></div><div><span class="muted">마트</span><b class="num">${p.marts}</b></div></div>`;
   // 주변 아파트
   const a = p?.apts;
-  const density = waiting ? loading : !a ? none() : `<div class="rides"><div><span class="muted">500m</span><b class="num">${a.in500}개</b></div><div><span class="muted">1km</span><b class="num">${a.in1k}${a.more ? "+" : ""}개</b></div></div>`;
+  const nh = g.nearHH;
+  const km = nh?.done ? `<b class="num" title="1km 안 ${a?.in1k}개 단지 중 ${nh.matched}개 세대수 합계${nh.matched < nh.total ? " (관리정보 미등록 단지는 빠짐)" : ""}">${nh.sum.toLocaleString()}세대</b>`
+    : `<b class="num" title="세대수 계산 중">${a?.in1k}${a?.more ? "+" : ""}개 <span class="muted">…</span></b>`;
+  const density = waiting ? loading : !a ? none() : `<div class="rides"><div><span class="muted">500m</span><b class="num">${a.in500}개 단지</b></div><div><span class="muted">1km</span>${km}</div></div>`;
   // 중학교
   const school = waiting ? loading : !p ? none() : p.school
     ? `<span style="font-weight:500">${esc(p.school.name)}</span><span class="sm">${p.school.meters.toLocaleString()}m</span>` : none("3km 안 없음");
@@ -733,7 +738,7 @@ function openReport(g) {
       <div class="rbox"><div class="t">가까운 역</div>${p?.station ? `${lineBadge(st.line)} ${esc(st.base)} · 도보 약 ${p.station.walkMin}분 (${p.station.meters.toLocaleString()}m)` : "3km 안 없음"}</div>
       <div class="rbox"><div class="t">3km 안 쇼핑</div>${p ? `백화점 ${p.depts}곳 · 큰 마트 ${p.marts}곳` : "-"}</div>
       <div class="rbox"><div class="t">가까운 중학교</div>${basis.school}</div>
-      <div class="rbox"><div class="t">주변 아파트 단지</div>${p?.apts ? `500m 안 ${p.apts.in500}개 · 1km 안 ${p.apts.in1k}${p.apts.more ? "개 이상" : "개"}` : "-"}</div>
+      <div class="rbox"><div class="t">주변 아파트 단지</div>${p?.apts ? `500m 안 ${p.apts.in500}개 · 1km 안 ${p.apts.in1k}${p.apts.more ? "개 이상" : "개"}${g.nearHH?.done ? `<br>1km 안 세대수 약 <b>${g.nearHH.sum.toLocaleString()}세대</b> (${g.nearHH.matched}개 단지 합계)` : ""}` : "-"}</div>
       <div class="rbox"><div class="t">단지 규모</div>${basis.size}</div>
       <div class="rbox"><div class="t">용적률 · 건폐율</div>${b && !b.error && b.far ? `${b.far}%${b.bcr ? ` · ${b.bcr}%` : ""}` : "건축물대장에 값 없음"}</div>
     </div>
@@ -797,20 +802,31 @@ function kMatch(list, dong, name) {
 }
 const kLists = {}; // 구 코드 → 단지 목록 (이번 화면에서 기억)
 const kInfo = store.get("kinfo", {}); // 단지 코드 → 세대수 (브라우저에 기억, 세대수는 거의 안 바뀌어요)
+function getKList(gc) {
+  if (!kLists[gc]) kLists[gc] = fetch(`/api/complex?gu=${gc}`).then((r) => r.json()).then((r) => r.list || null).catch(() => null);
+  return kLists[gc];
+}
+// 공공데이터포털이 빠른 요청을 거절할 수 있어서 하나씩, 실패하면 잠깐 쉬었다가 다시 물어봐요
+async function fetchKInfo(c) {
+  if (kInfo[c]) return kInfo[c];
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await fetch(`/api/complex?code=${c}`);
+      const d = await r.json();
+      if (r.ok) { kInfo[c] = { households: d.households, buildings: d.buildings }; store.set("kinfo", kInfo); break; }
+    } catch {}
+    await new Promise((ok) => setTimeout(ok, 1200 * (i + 1)));
+  }
+  await new Promise((ok) => setTimeout(ok, 150));
+  return kInfo[c];
+}
 async function loadComplex() {
   const token = runToken;
   const codes = [...new Set(groups.map((g) => GU_CODE[g.gu]))];
-  for (const gc of codes) {
-    if (!kLists[gc]) {
-      try {
-        const r = await (await fetch(`/api/complex?gu=${gc}`)).json();
-        if (r.list) kLists[gc] = r.list; else if (r.none) return;
-      } catch {}
-    }
-  }
+  for (const gc of codes) await getKList(gc);
   if (token !== runToken) return;
   for (const g of groups) {
-    const list = kLists[GU_CODE[g.gu]];
+    const list = await getKList(GU_CODE[g.gu]);
     if (!list) { g.kapt = { error: true }; continue; }
     const hit = kMatch(list, g.dong, g.apt);
     g.kapt = hit ? { found: true, kaptCode: hit.c, kaptName: hit.n, ...(kInfo[hit.c] || {}) } : { found: false };
@@ -819,19 +835,46 @@ async function loadComplex() {
   const need = groups.filter((g) => g.kapt.found && g.kapt.households === undefined);
   await runQueue(need, 1, async (g) => {
     const c = g.kapt.kaptCode;
-    if (kInfo[c]) { Object.assign(g.kapt, kInfo[c]); return; }
-    for (let i = 0; i < 3; i++) {
-      try {
-        const r = await fetch(`/api/complex?code=${c}`);
-        const d = await r.json();
-        if (r.ok) { kInfo[c] = { households: d.households, buildings: d.buildings }; Object.assign(g.kapt, kInfo[c]); store.set("kinfo", kInfo); break; }
-      } catch {}
-      await new Promise((ok) => setTimeout(ok, 1200 * (i + 1)));
-    }
+    await fetchKInfo(c);
     // 같은 단지 코드를 쓰는 다른 카드도 채워요
     for (const x of groups) if (x.kapt?.kaptCode === c && kInfo[c]) Object.assign(x.kapt, kInfo[c]);
-    await new Promise((ok) => setTimeout(ok, 150));
   });
+}
+
+// ---- 1km 안 세대수 합계 ----
+// 카카오에서 받은 주변 아파트 이름을 K-apt 단지 목록과 맞춰서, 각 단지 세대수를 더해요.
+// 처음엔 시간이 좀 걸리지만, 세대수는 브라우저에 기억해 둬서 다음부터는 바로 나와요.
+async function loadNearHH() {
+  const token = runToken;
+  const order = [...groups].sort((a, b) => (b.s?.total ?? -1) - (a.s?.total ?? -1)); // 점수 높은 단지부터
+  for (const g of order) {
+    const list = g.place?.apts?.list;
+    if (!list) continue;
+    const codes = new Set();
+    for (const [n, , addr] of list) {
+      const parts = String(addr).split(" ");
+      const gc = GU_CODE[parts[1]];
+      if (!gc || parts[0] !== "서울") continue;
+      const kl = await getKList(gc);
+      const hit = kl && kMatch(kl, parts[2], n);
+      if (hit) codes.add(hit.c);
+    }
+    g.nearCodes = [...codes];
+    g.nearTotal = list.length;
+  }
+  if (token !== runToken) return;
+  const sumUp = (g) => {
+    if (!g.nearCodes) return;
+    const known = g.nearCodes.filter((c) => kInfo[c]);
+    g.nearHH = { done: known.length === g.nearCodes.length, matched: g.nearCodes.length, total: g.nearTotal,
+      sum: known.reduce((s, c) => s + (kInfo[c].households || 0), 0) };
+  };
+  groups.forEach(sumUp); scheduleRender();
+  for (const g of order) {
+    if (!g.nearCodes || g.nearHH?.done) continue;
+    for (const c of g.nearCodes) { if (token !== runToken) return; await fetchKInfo(c); }
+    groups.forEach(sumUp); scheduleRender();
+  }
 }
 
 // ---- 주변 정보 (카카오맵) ----
