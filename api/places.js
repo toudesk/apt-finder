@@ -1,6 +1,6 @@
 // 단지 주소를 받아서 카카오맵으로 주변 정보를 찾아주는 서버 함수예요.
 // /api/places?addr=서울 노원구 중계동 393&name=중계무지개
-// 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수, 가장 가까운 중학교,
+// 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수, 가장 가까운 중학교, 주변 아파트 단지 수,
 //            건축물대장의 용적률·건폐율(값이 있을 때)
 // 카카오 REST API 키는 KAKAO_REST_KEY, 건축물대장은 공공데이터포털 키 MOLIT_API_KEY 를 써요.
 
@@ -50,13 +50,16 @@ export default async function handler(req, res) {
       }
       return out;
     };
-    const [sub, martDocs, deptDocs, schoolDocs, building] = await Promise.all([
+    const [sub, martDocs, deptDocs, schoolDocs, building, aptDocs] = await Promise.all([
       call("search/category.json", { ...near, sort: "distance", category_group_code: "SW8", size: "1" }),
       all("search/category.json", { ...near, sort: "distance", category_group_code: "MT1" }),
       all("search/keyword.json", { ...near, sort: "accuracy", query: "백화점" }),
       call("search/keyword.json", { x: pos.x, y: pos.y, radius: "3000", sort: "distance", category_group_code: "SC4", query: "중학교", size: "15" })
         .then((r) => r.documents || []),
       getBuilding(lot).catch((e) => ({ error: e.message })),
+      // 주변 아파트 단지 (1km 안, 최대 45곳까지 받아와요)
+      all("search/keyword.json", { x: pos.x, y: pos.y, radius: "1000", sort: "distance", query: "아파트" })
+        .catch(() => null),
     ]);
     // 가장 가까운 중학교 (분류가 '중학교'인 곳만)
     const sc = schoolDocs.find((d) => /중학교$/.test(d.category_name));
@@ -70,6 +73,21 @@ export default async function handler(req, res) {
     );
     // 백화점 안의 매장들은 빼고, 분류가 '백화점'인 본점·지점만 세요
     const depts = new Set(deptDocs.filter((d) => /백화점$/.test(d.category_name)).map((d) => d.id));
+
+    // 주변 아파트 단지 수: '아파트' 분류만, 'OO아파트 101동'·상가·관리사무소 같은 건 빼고, 같은 단지는 한 번만 세요
+    let apts = null;
+    if (aptDocs) {
+      const NOT = /(상가|관리|경비|어린이집|유치원|놀이터|정문|후문|주차|노인정|경로당|커뮤니티|피트니스|분양|모델하우스|부동산)/;
+      const seen = new Map();
+      for (const d of aptDocs) {
+        if (!/아파트$/.test(d.category_name || "") || NOT.test(d.place_name)) continue;
+        const base = d.place_name.replace(/\s*\d+동$/, "").replace(/\(.*?\)/g, "").replace(/아파트|\s/g, "");
+        const m = Number(d.distance);
+        if (!seen.has(base) || seen.get(base) > m) seen.set(base, m);
+      }
+      const ds = [...seen.values()];
+      apts = { in500: ds.filter((m) => m <= 500).length, in1k: ds.length, more: aptDocs.length >= 45 };
+    }
 
     // 결과는 오래 저장해 둬요 (역·마트 위치는 거의 안 바뀌니까요)
     res.setHeader("Cache-Control", "s-maxage=2592000, stale-while-revalidate=2592000");
@@ -87,6 +105,7 @@ export default async function handler(req, res) {
       depts: depts.size,
       school: sc ? { name: sc.place_name, meters: Number(sc.distance) } : null,
       building,
+      apts,
     });
   } catch (e) {
     return res.status(502).json({ error: e.message });
