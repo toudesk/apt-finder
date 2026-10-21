@@ -25,6 +25,8 @@ export default async function handler(req, res) {
         for (const it of items) out.push({ c: it.kaptCode, n: String(it.kaptName || "").trim(), d: it.as3 });
         if (!items.length || page * 1000 >= parseInt(body.totalCount || "0", 10)) break;
       }
+      // 가끔 공공데이터포털이 빈 목록을 돌려줄 때가 있어요 → 저장하지 않고 '잠시 후 다시'로 알려요
+      if (!out.length) return res.status(503).json({ busy: true, error: "단지 목록이 비어 있어요. 잠시 후 다시 시도해요." });
       res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
       return res.status(200).json({ list: out });
     }

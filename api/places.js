@@ -94,7 +94,8 @@ export default async function handler(req, res) {
     }
 
     // 결과는 오래 저장해 둬요 (역·마트 위치는 거의 안 바뀌니까요)
-    res.setHeader("Cache-Control", "s-maxage=2592000, stale-while-revalidate=2592000");
+    // 건축물대장이 잠깐 바빠서(429) 실패한 결과는 10분만 저장해요
+    res.setHeader("Cache-Control", building?.error ? "s-maxage=600" : "s-maxage=2592000, stale-while-revalidate=2592000");
     return res.status(200).json({
       found: true,
       station: st
