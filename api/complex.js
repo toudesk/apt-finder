@@ -17,6 +17,18 @@ export default async function handler(req, res) {
   const name = String(req.query.name || "").slice(0, 60);
   if (!/^\d{5}$/.test(gu) || !name) return res.status(400).json({ error: "구 코드와 단지 이름이 필요해요." });
 
+  if (req.query.debug) {
+    // 점검용: 단지 목록 API가 어떻게 응답하는지 그대로 보여줘요 (키는 보여주지 않아요)
+    const out = {};
+    for (const [op, params] of [
+      ["getSigunguAptList4", { sigunguCode: gu }],
+      ["getLegaldongAptList4", { bjdCode: `${gu}10600` }],
+    ]) {
+      const r = await fetch(`https://apis.data.go.kr/1613000/AptListService4/${op}?${new URLSearchParams({ serviceKey: key, numOfRows: "3", pageNo: "1", ...params })}`);
+      out[op] = { status: r.status, body: (await r.text()).slice(0, 700) };
+    }
+    return res.status(200).json(out);
+  }
   try {
     const list = await getList(key, gu);
     const hit = match(list, dong, name);
