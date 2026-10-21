@@ -472,15 +472,73 @@ function bldHtml(g) {
   return parts.length ? " · " + parts.join(" · ") : "";
 }
 const GU_CODE = Object.fromEntries(GU.map(([n, c]) => [n, c]));
-// 공공데이터포털이 한꺼번에 많이 부르면 거절해서(429), 2개씩 천천히 부르고 실패하면 한 번 더 시도해요
-function loadComplex() {
-  const url = (g) => `/api/complex?gu=${GU_CODE[g.gu]}&dong=${encodeURIComponent(g.dong)}&name=${encodeURIComponent(g.apt)}`;
-  return runQueue(groups, 2, async (g) => {
-    for (let i = 0; i < 2; i++) {
-      try { g.kapt = await (await fetch(url(g))).json(); } catch { g.kapt = { error: true }; }
-      if (!g.kapt.error) break;
-      await new Promise((ok) => setTimeout(ok, 1500));
+// ---- 단지 세대수 (K-apt) ----
+// 구마다 단지 목록을 한 번 받아서 여기서 이름을 맞추고, 맞춘 단지만 하나씩 천천히 세대수를 물어봐요.
+// 실거래가 단지명과 K-apt 단지명은 표기가 달라요. 예) "상계주공7(고층)" ↔ "상계주공7단지", "한신4차" ↔ "한신(4차)"
+const kClean = (s) => s.replace(/아파트|APT|apt/g, "").replace(/단지/g, "").replace(/[^0-9a-zA-Z가-힣]/g, "");
+function kForms(s) {
+  const inner = (s.match(/\((.*?)\)/g) || []).map((x) => x.slice(1, -1)).join("");
+  return [...new Set([kClean(s.replace(/\(.*?\)/g, "")), kClean(inner), kClean(s)].filter((x) => x.length >= 2))];
+}
+const kDigits = (s) => (s.match(/\d+/g) || []).join(",");
+function kDice(a, b) {
+  const bi = (s) => { const r = []; for (let i = 0; i < s.length - 1; i++) r.push(s.slice(i, i + 2)); return r; };
+  const A = bi(a), B = bi(b); if (!A.length || !B.length) return 0;
+  let hit = 0; const pool = [...B];
+  for (const x of A) { const i = pool.indexOf(x); if (i >= 0) { hit++; pool.splice(i, 1); } }
+  return (2 * hit) / (A.length + B.length);
+}
+function kPair(a, b) {
+  const da = kDigits(a), db = kDigits(b); let pen = 1;
+  if (da !== db) { if (da && db) return 0; pen = 0.8; }  // 번호가 둘 다 있는데 다르면 다른 단지
+  if (a === b) return pen;
+  const [s, l] = a.length < b.length ? [a, b] : [b, a];
+  if (l.includes(s)) return 0.9 * pen * Math.min(1, (s.length / l.length) * 1.5); // 짧은 이름이 긴 이름에 '우연히' 들어간 경우는 감점
+  return kDice(a, b) * pen;
+}
+function kMatch(list, dong, name) {
+  const T = kForms(name);
+  const score = (c) => { let b = 0; for (const x of T) for (const y of kForms(c.n)) b = Math.max(b, kPair(x, y)); return b; };
+  const pick = (cands, need) => { let best = null, bs = 0; for (const c of cands) { const v = score(c); if (v > bs) { best = c; bs = v; } } return bs >= need ? best : null; };
+  // 같은 동에서 먼저 찾고, 없으면 구 전체에서 거의 똑같은 이름만 인정
+  return pick(list.filter((c) => c.d === dong), 0.6) || pick(list, 0.95);
+}
+const kLists = {}; // 구 코드 → 단지 목록 (이번 화면에서 기억)
+const kInfo = store.get("kinfo", {}); // 단지 코드 → 세대수 (브라우저에 기억, 세대수는 거의 안 바뀌어요)
+async function loadComplex() {
+  const token = runToken;
+  const codes = [...new Set(groups.map((g) => GU_CODE[g.gu]))];
+  for (const gc of codes) {
+    if (!kLists[gc]) {
+      try {
+        const r = await (await fetch(`/api/complex?gu=${gc}`)).json();
+        if (r.list) kLists[gc] = r.list; else if (r.none) return;
+      } catch {}
     }
+  }
+  if (token !== runToken) return;
+  for (const g of groups) {
+    const list = kLists[GU_CODE[g.gu]];
+    if (!list) { g.kapt = { error: true }; continue; }
+    const hit = kMatch(list, g.dong, g.apt);
+    g.kapt = hit ? { found: true, kaptCode: hit.c, kaptName: hit.n, ...(kInfo[hit.c] || {}) } : { found: false };
+  }
+  scheduleRender();
+  const need = groups.filter((g) => g.kapt.found && g.kapt.households === undefined);
+  await runQueue(need, 1, async (g) => {
+    const c = g.kapt.kaptCode;
+    if (kInfo[c]) { Object.assign(g.kapt, kInfo[c]); return; }
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await fetch(`/api/complex?code=${c}`);
+        const d = await r.json();
+        if (r.ok) { kInfo[c] = { households: d.households, buildings: d.buildings }; Object.assign(g.kapt, kInfo[c]); store.set("kinfo", kInfo); break; }
+      } catch {}
+      await new Promise((ok) => setTimeout(ok, 1200 * (i + 1)));
+    }
+    // 같은 단지 코드를 쓰는 다른 카드도 채워요
+    for (const x of groups) if (x.kapt?.kaptCode === c && kInfo[c]) Object.assign(x.kapt, kInfo[c]);
+    await new Promise((ok) => setTimeout(ok, 150));
   });
 }
 
