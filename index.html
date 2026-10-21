@@ -4,6 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>내 아파트 찾기</title>
+<meta name="theme-color" content="#2563eb" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/icon-192.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="아파트찾기" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
@@ -87,13 +93,21 @@
         <option value="84">84㎡ 이상 (32평형대~)</option>
       </select>
     </label>
+    <label>출근지 (선택)
+      <input id="work" list="work-list" placeholder="예: 강남역, 회사 이름" autocomplete="off" />
+      <datalist id="work-list">
+        <option value="강남역"></option><option value="시청역"></option><option value="여의도역"></option>
+        <option value="광화문역"></option><option value="삼성역"></option><option value="종각역"></option>
+        <option value="판교역"></option><option value="구로디지털단지역"></option><option value="마곡나루역"></option>
+      </datalist>
+    </label>
     <button class="go" id="go" type="submit">찾아보기</button>
   </form>
 
   <div id="notice"></div>
   <div id="result"></div>
 
-  <footer>데이터: 국토교통부 아파트 매매 실거래가 (공공데이터포털). 취소된 거래는 뺐어요. 참고용이니 실제 매물·가격은 꼭 직접 확인하세요.</footer>
+  <footer>데이터: 국토교통부 아파트 매매 실거래가 (공공데이터포털). 취소된 거래는 뺐어요. 출근 시간은 카카오맵 대중교통 경로로, 조회한 시각 기준이라 실제 출근 시간대와 다를 수 있어요. 참고용이니 실제 매물·가격은 꼭 직접 확인하세요.</footer>
 </div>
 
 <script>
@@ -154,8 +168,10 @@ function build(trades) {
     g.sizes = [...new Set(g.deals.map((d) => pyeong(d.area)))].sort((a, b) => a - b);
     return g;
   });
+  workPlace = $("work").value.trim();
   render("count");
   loadPlaces();
+  loadCommute();
 }
 
 function render(sort) {
@@ -166,6 +182,7 @@ function render(sort) {
     new: (a, b) => b.built - a.built,
     recent: (a, b) => b.latest.date.localeCompare(a.latest.date),
     station: (a, b) => walk(a) - walk(b),
+    commute: (a, b) => ride(a) - ride(b),
   };
   groups.sort(sorters[sort]);
   const guName = $("gu").selectedOptions[0].text;
@@ -185,6 +202,7 @@ function render(sort) {
         <option value="high">가격 높은 순</option>
         <option value="new">신축 순</option>
         <option value="station">역 가까운 순</option>
+        ${workPlace ? `<option value="commute">출근 짧은 순</option>` : ""}
       </select>
     </div>
     ${groups.map((g, i) => `
@@ -198,6 +216,7 @@ function render(sort) {
               <span class="chip">전용 ${g.sizes.join("·")}평</span>
             </div>
             <div class="near" id="near-${g.id}">${nearHtml(g)}</div>
+            ${workPlace ? `<div class="near" id="work-${g.id}">${commuteHtml(g)}</div>` : ""}
           </div>
           <div class="price">
             <b>${won(g.latest.price)}</b>
@@ -249,6 +268,53 @@ async function loadPlaces() {
     }
   };
   await Promise.all(Array.from({ length: 6 }, worker));
+}
+
+// ---- 4단계: 출근 시간 (카카오 대중교통 경로) ----
+let workPlace = "";
+let commuteToken = 0;
+const ride = (g) => (g.commute?.found ? g.commute.minutes : 9999);
+
+function commuteHtml(g) {
+  const c = g.commute;
+  if (c === undefined) return `<span class="muted">${esc(workPlace)}까지 출근 시간 계산 중…</span>`;
+  if (c.quota) return `<span class="muted">오늘 출근 시간 무료 조회량을 다 썼어요. 내일 다시 볼 수 있어요.</span>`;
+  if (!c.found) return c.none ? "" : `<span class="muted">${esc(workPlace)}까지 대중교통 경로를 찾지 못했어요</span>`;
+  const tr = c.transfers == null ? "" : c.transfers === 0 ? " · 환승 없음" : ` · 환승 ${c.transfers}회`;
+  return `<span>${esc(c.dest || workPlace)}까지 대중교통 <b>약 ${c.minutes}분</b>${tr}</span>`;
+}
+
+async function loadCommute() {
+  const token = ++commuteToken;
+  if (!workPlace) return;
+  const guName = $("gu").selectedOptions[0].text;
+  const queue = [...groups];
+  let stop = false;
+  const worker = async () => {
+    while (queue.length && token === commuteToken && !stop) {
+      const g = queue.shift();
+      try {
+        const addr = `서울 ${guName} ${g.dong} ${g.jibun}`.trim();
+        const r = await fetch(`/api/commute?addr=${encodeURIComponent(addr)}&name=${encodeURIComponent(g.apt)}&to=${encodeURIComponent(workPlace)}`);
+        g.commute = await r.json();
+        if (g.commute.quota) stop = true; // 무료 조회량이 끝나면 더 부르지 않아요
+      } catch { g.commute = { found: false }; }
+      if (token !== commuteToken) return;
+      const el = document.getElementById(`work-${g.id}`);
+      if (el) el.innerHTML = commuteHtml(g);
+    }
+    if (stop) for (const g of queue.splice(0)) {
+      g.commute = { quota: true };
+      const el = document.getElementById(`work-${g.id}`);
+      if (el) el.innerHTML = commuteHtml(g);
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+}
+
+// ---- 앱처럼 설치 (서비스 워커 등록) ----
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
 </script>
 </body>
