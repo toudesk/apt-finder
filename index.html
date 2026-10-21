@@ -111,8 +111,8 @@
   .listhead .hint { font-size: 13px; color: var(--sub); }
   .listhead select { width: auto; margin-left: auto; }
   .tbl { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-  .cols { display: grid; align-items: start; column-gap: 14px;
-    grid-template-columns: 128px 64px minmax(190px, 1.6fr) 118px 40px 64px 64px 112px 112px 84px 118px minmax(108px, 1fr); }
+  .cols { display: grid; align-items: start; column-gap: 12px;
+    grid-template-columns: 128px 64px minmax(160px, 1.6fr) 110px 48px 72px 64px 64px 104px 104px 84px 118px minmax(108px, 1fr); }
   .thead { position: sticky; top: 0; z-index: 2; background: #fafbfc; border-bottom: 1px solid var(--line);
     padding: 10px 18px; font-size: 13px; color: var(--text); font-weight: 500; align-items: end; }
   .thead small { display: block; font-weight: 400; font-size: 11px; color: #9ca3af; }
@@ -155,6 +155,15 @@
   .row .deals { display: none; border-top: 1px dashed var(--line); padding: 6px 18px 14px; background: #fcfcfd; }
   .row.open .deals { display: block; }
   .muted { color: var(--sub); }
+  .nodata { color: #9ca3af; font-size: 12px; }
+  .ext { font-size: 11px; color: var(--accent); display: block; margin-top: 2px; }
+  .deals h5 { margin: 12px 0 4px; font-size: 13px; }
+  .listing-none { background: #f8f9fb; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--sub); }
+  .listing-none a { color: var(--accent); }
+  .tcrit { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); }
+  .tcrit b { color: var(--accent); }
+  .quick { font: inherit; font-size: 13px; padding: 4px 11px; border-radius: 99px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  .quick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .ask { color: var(--accent); }
 
   /* ---- 단지 보고서 ---- */
@@ -176,7 +185,7 @@
     .c-grade { grid-column: 1 / span 2; } .c-total { grid-column: 3; } .c-name { grid-column: 1 / -1; grid-row: 2; }
     .c-price { grid-column: 4; grid-row: 1; }
     .cell .lbl { display: block; font-size: 11px; color: #9ca3af; margin-bottom: 1px; }
-    .c-count, .c-built, .c-hh, .c-station, .c-ride, .c-life, .c-density, .c-school { background: #f8f9fb; border-radius: 10px; padding: 8px 10px; }
+    .c-count, .c-listing, .c-built, .c-hh, .c-station, .c-ride, .c-life, .c-density, .c-school { background: #f8f9fb; border-radius: 10px; padding: 8px 10px; }
     .tr { text-align: left; }
     .rides div { justify-content: space-between; max-width: 160px; }
     .glist div { justify-content: flex-start; }
@@ -308,10 +317,11 @@ function scoreOf(g) {
   const s = {};
   // 교통: 역 도보(5분 이하 100 ~ 20분 0) + 출근(30분 이하 100 ~ 80분 0)
   const parts = [];
-  if (p && p.station) parts.push(lerp(p.station.walkMin, 5, 20));
-  else if (p) parts.push(0);
+  s.tWalk = p ? (p.station ? lerp(p.station.walkMin, 5, 20) : 0) : null;
+  if (s.tWalk != null) parts.push(s.tWalk);
   const avgC = avgRide(g);
-  if (avgC != null) parts.push(lerp(avgC, 30, 80));
+  s.tRide = avgC != null ? lerp(avgC, 30, 80) : null;
+  if (s.tRide != null) parts.push(s.tRide);
   s.traffic = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
   // 생활: 큰 마트 8곳이면 만점(60%), 백화점 3곳이면 만점(40%)
   s.life = p ? Math.min(p.marts, 8) / 8 * 60 + Math.min(p.depts, 3) / 3 * 40 : null;
@@ -453,6 +463,10 @@ function renderTools() {
     <select data-gf="${k}"><option value="0">전체</option><option value="3">S만</option><option value="2">A 이상</option><option value="1">B 이상</option></select></label>`;
   $("tools").innerHTML = `<div class="panel tools">
     <div class="tool-row">등급으로 거르기 ${opt("traffic")} ${opt("life")} ${opt("school")}</div>
+    <div class="tcrit"><b>교통 점수 기준</b> — 두 가지 점수의 평균이에요.
+      ① 가까운 지하철역까지 걷는 시간: 5분 이하 100점 → 20분 이상 0점 (직선거리×1.3, 분당 67m로 추정)
+      ② 출근지 평균 대중교통 시간: 30분 이하 100점 → 80분 이상 0점 (출근지를 넣었을 때만)
+      · 등급 S 85점↑ · A 70점↑ · B 50점↑ · C 그 아래. 교통 글자(S·A·B·C)에 마우스를 올리면 단지별 계산을 볼 수 있어요.</div>
     <details class="weights"><summary>점수 기준 비중 조절</summary>
       <div class="wgrid">${CATS.map((c) => `<label>${c.name} <b id="wv-${c.k}">${weights[c.k]}</b>
         <input type="range" min="0" max="3" step="1" value="${weights[c.k]}" data-w="${c.k}" />
@@ -471,6 +485,7 @@ function renderList() {
   const sorters = {
     score: (a, b) => (b.s.total ?? -1) - (a.s.total ?? -1),
     grade: (a, b) => (gradeAvg(b) ?? -1) - (gradeAvg(a) ?? -1),
+    traffic: (a, b) => (b.s.traffic ?? -1) - (a.s.traffic ?? -1) || walk(a) - walk(b),
     count: (a, b) => b.deals.length - a.deals.length,
     low: (a, b) => a.latest.price - b.latest.price,
     high: (a, b) => b.latest.price - a.latest.price,
@@ -499,10 +514,12 @@ function renderList() {
   $("result").innerHTML = `
     <div class="listhead">
       <strong>후보 단지 ${list.length}개</strong>${chips.join("")}
-      <span class="hint">줄을 누르면 거래 내역, '보고서'를 누르면 자세히 볼 수 있어요</span>
+      <button type="button" class="quick ${sortBy === "traffic" && gradeFilter.traffic >= 2 ? "on" : ""}" id="tbest" title="교통 A등급 이상만 남기고 교통 점수 순으로 정렬해요">교통 좋은 단지 먼저</button>
+      <span class="hint">줄을 누르면 매물·실거래, '보고서'를 누르면 자세히 볼 수 있어요</span>
       <select id="sort">
         <option value="score">종합 점수 순</option>
         <option value="grade">등급 점수 순</option>
+        <option value="traffic">교통 좋은 순</option>
         <option value="low">가격 낮은 순</option>
         <option value="high">가격 높은 순</option>
         <option value="count">거래 많은 순</option>
@@ -518,15 +535,21 @@ function renderList() {
       <div class="thead cols">
         <div>등급 점수<small>교통·생활·학군</small></div><div class="totcol">종합<small>점수</small></div>
         <div>단지<small>위치 · 평형 · 용적률</small></div>
-        <div class="tr">최근 실거래<small>날짜 · 층 · 범위</small></div><div class="tr">거래</div>
+        <div class="tr">최근 실거래<small>날짜 · 층 · 범위</small></div><div class="tr">실거래<small>기간 내</small></div><div class="tr">현재 매물<small>지금 올라온</small></div>
         <div class="tr">준공<small>연차</small></div><div class="tr">세대수</div>
         <div>가까운 역<small>도보 · 노선</small></div>
         <div class="tr">출근 대중교통<small>${works.length ? esc(works.map(short).join(" · ")) : "출근지 없음"}</small></div>
         <div class="tr">3km 내<small>백화점 · 마트</small></div>
         <div class="tr">주변 아파트<small>500m 단지 · 1km 세대수</small></div>
-        <div>가까운 중학교<small>거리</small></div>
+        <div>가까운 중학교<small>거리 · 학업성취도</small></div>
       </div>${list.map(card).join("")}</div>` : `<p class="empty">이 조건에 맞는 단지가 없어요.</p>`}`;
   $("sort").value = sortBy;
+  $("tbest").onclick = () => {
+    const on = !(sortBy === "traffic" && gradeFilter.traffic >= 2);
+    sortBy = on ? "traffic" : "score"; gradeFilter.traffic = on ? 2 : 0;
+    const sel = document.querySelector('[data-gf="traffic"]'); if (sel) sel.value = String(gradeFilter.traffic);
+    renderAll();
+  };
   $("sort").onchange = (e) => { sortBy = e.target.value; renderList(); };
   $("result").querySelectorAll("[data-clear]").forEach((a) => a.onclick = (e) => {
     e.preventDefault();
@@ -544,6 +567,17 @@ function renderList() {
 }
 
 // 등급 점수 = 교통·생활·학군 점수의 평균
+const ACH_NOTE = "지표: 교과별 학업성취 사항(성취도 A~E 비율) · 출처: 학교알리미. 학교알리미가 보안문자로 자동 조회를 막고 있어 가져올 수 없어요";
+function trafficWhy(g) {
+  const s = g.s; if (!s) return "";
+  const w = g.place?.station ? `역 도보 ${g.place.station.walkMin}분 → ${Math.round(s.tWalk)}점` : s.tWalk != null ? "역 없음 → 0점" : "";
+  const r = s.tRide != null ? ` / 출근 평균 ${avgRide(g)}분 → ${Math.round(s.tRide)}점` : " / 출근 시간 계산 전";
+  return w ? ` (${w}${r})` : "";
+}
+function listingNone(g) {
+  return `<div class="listing-none"><b>정보 없음</b> — 지금 올라온 매물의 수·가격·특징을 제공하는 공개(공식) 데이터가 없어서 표시하지 않아요.
+    <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산에서 매물 보기</a></div>`;
+}
 function gradeAvg(g) {
   const v = ["traffic", "life", "school"].map((k) => g.s?.[k]).filter((x) => x != null);
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
@@ -578,9 +612,9 @@ const aptName = (g) => g.kapt?.kaptName || g.apt.replace(/\(.*?\)/g, "").trim();
 const hogangUrl = (g) => `https://hogangnono.com/search?q=${encodeURIComponent(`${g.dong} ${aptName(g)}`)}`;
 function linksHtml(g) {
   return `<a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산</a>
-    <a href="${hogangUrl(g)}" target="_blank" rel="noopener">호갱노노</a>
-    <a href="https://asil.kr/asil/index.jsp" target="_blank" rel="noopener" data-copy="${esc(aptName(g))}">아실</a>
-    <a href="https://m.richgo.ai/pc" target="_blank" rel="noopener" data-copy="${esc(aptName(g))}">리치고</a>
+    <a href="${hogangUrl(g)}" target="_blank" rel="noopener" title="호갱노노 단지 검색 결과로 열려요">호갱노노</a>
+    <a href="https://asil.kr/asil/index.jsp" target="_blank" rel="noopener" data-copy="${esc(aptName(g))}" title="단지 상세로 바로 갈 수 없어 메인이 열려요. 단지명을 복사해 둘게요">아실</a>
+    <a href="https://m.richgo.ai/pc" target="_blank" rel="noopener" data-copy="${esc(aptName(g))}" title="단지 상세로 바로 갈 수 없어 메인이 열려요. 단지명을 복사해 둘게요">리치고</a>
     <a href="${mapUrl(g)}" target="_blank" rel="noopener">지도</a>`;
 }
 document.addEventListener("click", (e) => {
@@ -633,7 +667,8 @@ function card(g) {
   const density = waiting ? loading : !a ? none() : `<div class="rides"><div><span class="muted">500m</span><b class="num">${a.in500}개 단지</b></div><div><span class="muted">1km</span>${km}</div></div>`;
   // 중학교
   const school = waiting ? loading : !p ? none() : p.school
-    ? `<span style="font-weight:500">${esc(p.school.name)}</span><span class="sm">${p.school.meters.toLocaleString()}m</span>` : none("3km 안 없음");
+    ? `<span style="font-weight:500">${esc(p.school.name)}</span><span class="sm">${p.school.meters.toLocaleString()}m</span>
+      <span class="nodata" title="${ACH_NOTE}">학업성취도 정보 없음</span>` : none("3km 안 없음");
   // 세대수
   const hh = g.kapt?.households ? `<span class="big num" style="font-size:14px">${g.kapt.households.toLocaleString()}</span>`
     : g.kapt?.found === false ? none("소규모") : loading;
@@ -644,7 +679,7 @@ function card(g) {
     <div class="row-main cols">
       <div class="cell c-grade">${L("등급 점수")}<div class="gradecol">${pill(ga)}
         <div class="glist">${[["traffic", "교통"], ["life", "생활"], ["school", "학군"]].map(([k, n]) =>
-          `<div>${n}<span class="gl g${grade(s[k])}" title="${n} ${s[k] == null ? "계산 중" : Math.round(s[k]) + "점"}">${grade(s[k])}</span></div>`).join("")}</div></div></div>
+          `<div>${n}<span class="gl g${grade(s[k])}" title="${n} ${s[k] == null ? "계산 중" : Math.round(s[k]) + "점"}${k === "traffic" ? trafficWhy(g) : ""}">${grade(s[k])}</span></div>`).join("")}</div></div></div>
       <div class="cell c-total totcol">${L("종합")}${pill(s.total)}<a href="#" data-report="${g.id}">보고서</a></div>
       <div class="cell c-name">
         <div class="name">${esc(g.apt)}</div>
@@ -658,7 +693,8 @@ function card(g) {
         <span class="big num">${won(g.latest.price)}</span>
         <span class="sm">${g.latest.date.slice(2).replace(/-/g, ".")} · ${g.latest.floor}층 · ${pyeong(g.latest.area)}평</span>
         ${g.low === g.high ? "" : `<span class="sm">${won(g.low)}~${won(g.high)}</span>`}</div>
-      <div class="cell c-count tr num">${L("거래")}<b>${g.deals.length}</b><span class="sm">건</span></div>
+      <div class="cell c-count tr num">${L("실거래 (기간 내)")}<b>${g.deals.length}건</b></div>
+      <div class="cell c-listing tr">${L("현재 매물")}<span class="nodata" title="현재 매물 수를 제공하는 공개 데이터가 없어요">정보 없음</span><a class="ext" href="${landUrl(g)}" target="_blank" rel="noopener">네이버 확인</a></div>
       <div class="cell c-built tr">${L("준공")}<span class="big num" style="font-size:14px">${g.built}</span><span class="sm">${year - g.built + 1}년차</span></div>
       <div class="cell c-hh tr">${L("세대수")}${hh}${g.kapt?.buildings ? `<span class="sm">${g.kapt.buildings}개 동</span>` : ""}</div>
       <div class="cell c-station">${L("가까운 역")}${station}</div>
@@ -669,6 +705,9 @@ function card(g) {
     </div>
     <div class="deals">
       <p class="breakdown">${CATS.map((c) => `${c.name} ${s[c.k] == null ? "계산 중" : Math.round(s[c.k]) + "점"}`).join(" · ")}</p>
+      <h5>현재 매물</h5>
+      ${listingNone(g)}
+      <h5>최근 실거래 <span class="muted" style="font-weight:400">${g.deals.length}건 (국토교통부 실거래가)</span></h5>
       <table>
         <tr><th>거래일</th><th>전용면적</th><th>층</th><th class="r">가격</th></tr>
         ${g.deals.map((d) => `<tr><td>${d.date}</td><td>${d.area}㎡ (${pyeong(d.area)}평)</td><td>${d.floor}층</td><td class="r">${won(d.price)}</td></tr>`).join("")}
@@ -690,7 +729,7 @@ function priceChart(deals) {
   const pts = ds.map((d, i) => `${X(t[i]).toFixed(1)},${Y(d.price).toFixed(1)}`);
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="실거래가 추이">
     ${[v1, (v0 + v1) / 2, v0].map((y) => `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(y)}" y2="${Y(y)}" stroke="#e5e7eb"/>
-      <text x="${P.l - 6}" y="${Y(y) + 4}" text-anchor="end" font-size="11" fill="#6b7280">${(y / 10000).toFixed(1)}억</text>`).join("")}
+      <text x="${P.l - 6}" y="${Y(y) + 4}" text-anchor="end" font-size="11" fill="#6b7280">${(y / 10000).toFixed(v1 - v0 < 3000 ? 2 : 1)}억</text>`).join("")}
     <polyline points="${pts.join(" ")}" fill="none" stroke="#2563eb" stroke-width="2"/>
     ${ds.map((d, i) => `<circle cx="${X(t[i])}" cy="${Y(d.price)}" r="3.5" fill="#2563eb"><title>${d.date} · ${won(d.price)} · ${pyeong(d.area)}평 ${d.floor}층</title></circle>`).join("")}
     <text x="${P.l}" y="${H - 6}" font-size="11" fill="#6b7280">${ds[0].date.slice(0, 7)}</text>
@@ -701,7 +740,8 @@ function openReport(g) {
   const s = g.s, p = g.place?.found ? g.place : null, b = p?.building;
   const st = p?.station ? stationParts(p.station.name) : null;
   const basis = {
-    traffic: p?.station ? `${esc(st.base)} 도보 ${p.station.walkMin}분${avgRide(g) != null ? ` · 출근 평균 ${avgRide(g)}분` : ""}` : "역 정보 없음",
+    traffic: (p?.station ? `${esc(st.base)} 도보 ${p.station.walkMin}분 → ${Math.round(s.tWalk)}점` : "3km 안 역 없음 → 0점")
+      + (s.tRide != null ? `<br>출근 평균 ${avgRide(g)}분 → ${Math.round(s.tRide)}점` : "<br>출근 시간 없음(계산 전)") + "<br>두 점수의 평균",
     life: p ? `3km 안 큰 마트 ${p.marts}곳 · 백화점 ${p.depts}곳` : "정보 없음",
     school: p?.school ? `${esc(p.school.name)} ${p.school.meters.toLocaleString()}m` : "3km 안 중학교 없음",
     price: `전용 평당 ${won(Math.round(g.ppp))} (이번 결과 ${groups.length}개 중 비교)`,
@@ -726,7 +766,9 @@ function openReport(g) {
     <h4>점수 <span class="meta" style="font-weight:400">종합 ${s.total ?? "-"}점 · 등급 점수 ${gradeAvg(g) ?? "-"}점</span></h4>
     <div class="rgrid">${CATS.map((c) => `<div class="rbox"><div class="t"><span>${c.name} <span class="meta" style="font-weight:400">비중 ${weights[c.k]}</span></span>
       <span class="g g${grade(s[c.k])}">${grade(s[c.k])} ${s[c.k] == null ? "" : Math.round(s[c.k])}</span></div>${basis[c.k]}</div>`).join("")}</div>
-    <h4>실거래가 추이 <span class="meta" style="font-weight:400">${g.deals.length}건 · ${won(g.low)}~${won(g.high)}</span></h4>
+    <h4>현재 매물</h4>
+    ${listingNone(g)}
+    <h4>최근 실거래가 추이 <span class="meta" style="font-weight:400">${g.deals.length}건 · ${won(g.low)}~${won(g.high)}</span></h4>
     ${priceChart(g.deals)}
     <table>
       <tr><th>거래일</th><th>전용면적</th><th>층</th><th class="r">가격</th></tr>
@@ -737,12 +779,16 @@ function openReport(g) {
     <div class="rgrid">
       <div class="rbox"><div class="t">가까운 역</div>${p?.station ? `${lineBadge(st.line)} ${esc(st.base)} · 도보 약 ${p.station.walkMin}분 (${p.station.meters.toLocaleString()}m)` : "3km 안 없음"}</div>
       <div class="rbox"><div class="t">3km 안 쇼핑</div>${p ? `백화점 ${p.depts}곳 · 큰 마트 ${p.marts}곳` : "-"}</div>
-      <div class="rbox"><div class="t">가까운 중학교</div>${basis.school}</div>
+      <div class="rbox"><div class="t">가까운 중학교</div>${basis.school}
+        <div style="margin-top:6px">학업성취도: <b>정보 없음</b></div>
+        <div class="muted" style="font-size:12px">지표: 교과별 학업성취 사항(성취도 A~E 비율, %) · 기준: 매년 공시 · 출처: 학교알리미(교육부·KERIS)<br>학교알리미가 이 항목을 보안문자로 보호하고 있어 자동으로 가져올 수 없어요.
+        <a href="https://www.schoolinfo.go.kr/ei/ss/pneiss_a05_s0.do" target="_blank" rel="noopener">학교알리미에서 직접 보기</a></div></div>
       <div class="rbox"><div class="t">주변 아파트 단지</div>${p?.apts ? `500m 안 ${p.apts.in500}개 · 1km 안 ${p.apts.in1k}${p.apts.more ? "개 이상" : "개"}${g.nearHH?.done ? `<br>1km 안 세대수 약 <b>${g.nearHH.sum.toLocaleString()}세대</b> (${g.nearHH.matched}개 단지 합계)` : ""}` : "-"}</div>
       <div class="rbox"><div class="t">단지 규모</div>${basis.size}</div>
       <div class="rbox"><div class="t">용적률 · 건폐율</div>${b && !b.error && b.far ? `${b.far}%${b.bcr ? ` · ${b.bcr}%` : ""}` : "건축물대장에 값 없음"}</div>
     </div>
-    <p class="help">점수는 이 앱이 정한 기준으로 계산한 참고용이에요. 역 도보 시간은 직선거리로 추정한 값이에요.</p>
+    <p class="help">점수는 이 앱이 정한 기준으로 계산한 참고용이에요. 역 도보 시간은 직선거리로 추정한 값이에요.<br>
+      바로가기: 호갱노노는 단지 검색 결과로 열려요(단지를 한 번 눌러 주세요). 아실·리치고는 단지 상세 주소를 공개하지 않아 메인 화면이 열리고, 단지명이 복사돼요.</p>
   </div>`;
   const close = () => { m.remove(); document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
   const onKey = (e) => { if (e.key === "Escape") close(); };
