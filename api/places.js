@@ -1,6 +1,6 @@
 // 단지 주소를 받아서 카카오맵으로 주변 정보를 찾아주는 서버 함수예요.
 // /api/places?addr=서울 노원구 중계동 393&name=중계무지개
-// 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수
+// 돌려주는 것: 가까운 지하철역, 도보 예상 시간, 3km 안 대형마트·백화점 수, 가장 가까운 중학교
 // 카카오 REST API 키는 Vercel 환경변수 KAKAO_REST_KEY 에 넣어요.
 
 const KAKAO = "https://dapi.kakao.com/v2/local";
@@ -44,11 +44,15 @@ export default async function handler(req, res) {
       }
       return out;
     };
-    const [sub, martDocs, deptDocs] = await Promise.all([
+    const [sub, martDocs, deptDocs, schoolDocs] = await Promise.all([
       call("search/category.json", { ...near, sort: "distance", category_group_code: "SW8", size: "1" }),
       all("search/category.json", { ...near, sort: "distance", category_group_code: "MT1" }),
       all("search/keyword.json", { ...near, sort: "accuracy", query: "백화점" }),
+      call("search/keyword.json", { x: pos.x, y: pos.y, radius: "3000", sort: "distance", category_group_code: "SC4", query: "중학교", size: "15" })
+        .then((r) => r.documents || []),
     ]);
+    // 가장 가까운 중학교 (분류가 '중학교'인 곳만)
+    const sc = schoolDocs.find((d) => /중학교$/.test(d.category_name));
 
     const st = sub.documents?.[0];
     // 카카오 '대형마트' 분류에는 동네 슈퍼도 섞여 있어서, 큰 마트 브랜드만 세요
@@ -74,6 +78,7 @@ export default async function handler(req, res) {
         : null,
       marts: marts.size,
       depts: depts.size,
+      school: sc ? { name: sc.place_name, meters: Number(sc.distance) } : null,
     });
   } catch (e) {
     return res.status(502).json({ error: e.message });
