@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>내 아파트 찾기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1a1d23; --sub: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --accent-soft: #eff4ff; --warn-bg: #fff7e6; --warn: #92580a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .lead { color: var(--sub); margin: 0 0 20px; }
+
+  .filters { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--sub); font-weight: 500; }
+  select, input { font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px;
+    background: #fff; color: var(--text); width: 100%; }
+  button.go { grid-column: 1 / -1; font: inherit; font-weight: 700; padding: 12px; border: 0;
+    border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; }
+  button.go:disabled { opacity: .6; cursor: wait; }
+
+  .notice { margin: 16px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg);
+    color: var(--warn); font-size: 14px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 22px 0 10px; }
+  .bar strong { font-size: 17px; }
+  .bar select { width: auto; }
+
+  .apt { background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
+  .apt-head { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 14px 16px; cursor: pointer; }
+  .apt-head:hover { background: #fafbfc; }
+  .name { font-weight: 700; font-size: 16px; }
+  .meta { color: var(--sub); font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .price { text-align: right; }
+  .price b { font-size: 18px; display: block; }
+  .price span { font-size: 12px; color: var(--sub); }
+  .deals { display: none; border-top: 1px solid var(--line); padding: 6px 16px 12px; }
+  .apt.open .deals { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 7px 4px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--sub); font-weight: 500; font-size: 12px; }
+  td.r, th.r { text-align: right; }
+  .empty { text-align: center; color: var(--sub); padding: 40px 0; }
+  footer { margin-top: 30px; font-size: 12px; color: var(--sub); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>내 아파트 찾기</h1>
+  <p class="lead">구와 예산을 고르면 최근 실거래된 아파트를 단지별로 모아 보여드려요.</p>
+
+  <form class="filters" id="f">
+    <label>구
+      <select id="gu"></select>
+    </label>
+    <label>기간
+      <select id="months">
+        <option value="3">최근 3개월</option>
+        <option value="6">최근 6개월</option>
+        <option value="12">최근 1년</option>
+      </select>
+    </label>
+    <label>최소 예산 (억)
+      <input id="min" type="number" step="0.5" min="0" value="5" />
+    </label>
+    <label>최대 예산 (억)
+      <input id="max" type="number" step="0.5" min="0" value="6" />
+    </label>
+    <label>크기 (전용면적)
+      <select id="area">
+        <option value="0">전체</option>
+        <option value="39">39㎡ 이상 (16평형대~)</option>
+        <option value="49">49㎡ 이상 (20평형대~)</option>
+        <option value="59">59㎡ 이상 (24평형대~)</option>
+        <option value="84">84㎡ 이상 (32평형대~)</option>
+      </select>
+    </label>
+    <button class="go" id="go" type="submit">찾아보기</button>
+  </form>
+
+  <div id="notice"></div>
+  <div id="result"></div>
+
+  <footer>데이터: 국토교통부 아파트 매매 실거래가 (공공데이터포털). 취소된 거래는 뺐어요. 참고용이니 실제 매물·가격은 꼭 직접 확인하세요.</footer>
+</div>
+
+<script>
+const GU = [["종로구","11110"],["중구","11140"],["용산구","11170"],["성동구","11200"],["광진구","11215"],
+  ["동대문구","11230"],["중랑구","11260"],["성북구","11290"],["강북구","11305"],["도봉구","11320"],
+  ["노원구","11350"],["은평구","11380"],["서대문구","11410"],["마포구","11440"],["양천구","11470"],
+  ["강서구","11500"],["구로구","11530"],["금천구","11545"],["영등포구","11560"],["동작구","11590"],
+  ["관악구","11620"],["서초구","11650"],["강남구","11680"],["송파구","11710"],["강동구","11740"]];
+
+const $ = (id) => document.getElementById(id);
+$("gu").innerHTML = GU.map(([n, c]) => `<option value="${c}" ${c === "11350" ? "selected" : ""}>${n}</option>`).join("");
+
+let groups = [];
+
+function won(man) { // 만원 → "5억 1,500"
+  const eok = Math.floor(man / 10000), rest = man % 10000;
+  if (!eok) return `${rest.toLocaleString()}만`;
+  return rest ? `${eok}억 ${rest.toLocaleString()}` : `${eok}억`;
+}
+const pyeong = (m2) => Math.round(m2 / 3.3058);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+$("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("go");
+  btn.disabled = true; btn.textContent = "불러오는 중…";
+  $("notice").innerHTML = "";
+  try {
+    const r = await fetch(`/api/trades?gu=${$("gu").value}&months=${$("months").value}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "불러오지 못했어요.");
+    if (data.demo) $("notice").innerHTML = `<p class="notice">지금은 <b>예시 데이터</b>예요. API 키를 설정하면 실제 실거래가가 나와요.</p>`;
+    build(data.trades);
+  } catch (err) {
+    $("result").innerHTML = `<p class="empty">${esc(err.message)}</p>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "찾아보기";
+  }
+});
+
+function build(trades) {
+  const min = parseFloat($("min").value || 0) * 10000;
+  const max = parseFloat($("max").value || 999) * 10000;
+  const area = parseFloat($("area").value);
+  const ok = trades.filter((t) => t.price >= min && t.price <= max && t.area >= area);
+
+  const map = new Map();
+  for (const t of ok) {
+    const k = `${t.apt}|${t.dong}|${t.jibun}`;
+    if (!map.has(k)) map.set(k, { apt: t.apt, dong: t.dong, built: t.built, deals: [] });
+    map.get(k).deals.push(t);
+  }
+  groups = [...map.values()].map((g) => {
+    g.deals.sort((a, b) => b.date.localeCompare(a.date));
+    g.latest = g.deals[0];
+    g.low = Math.min(...g.deals.map((d) => d.price));
+    g.high = Math.max(...g.deals.map((d) => d.price));
+    g.sizes = [...new Set(g.deals.map((d) => pyeong(d.area)))].sort((a, b) => a - b);
+    return g;
+  });
+  render("count");
+}
+
+function render(sort) {
+  const sorters = {
+    count: (a, b) => b.deals.length - a.deals.length,
+    low: (a, b) => a.latest.price - b.latest.price,
+    high: (a, b) => b.latest.price - a.latest.price,
+    new: (a, b) => b.built - a.built,
+    recent: (a, b) => b.latest.date.localeCompare(a.latest.date),
+  };
+  groups.sort(sorters[sort]);
+  const guName = $("gu").selectedOptions[0].text;
+  const year = new Date().getFullYear();
+
+  if (!groups.length) {
+    $("result").innerHTML = `<p class="empty">조건에 맞는 거래가 없어요. 예산이나 기간을 넓혀 보세요.</p>`;
+    return;
+  }
+  $("result").innerHTML = `
+    <div class="bar">
+      <strong>${esc(guName)} · ${groups.length}개 단지</strong>
+      <select id="sort">
+        <option value="count">거래 많은 순</option>
+        <option value="recent">최근 거래 순</option>
+        <option value="low">가격 낮은 순</option>
+        <option value="high">가격 높은 순</option>
+        <option value="new">신축 순</option>
+      </select>
+    </div>
+    ${groups.map((g, i) => `
+      <div class="apt" data-i="${i}">
+        <div class="apt-head">
+          <div>
+            <div class="name">${esc(g.apt)}</div>
+            <div class="meta">${esc(g.dong)} · ${g.built}년 준공 (${year - g.built + 1}년차)</div>
+            <div class="chips">
+              <span class="chip">거래 ${g.deals.length}건</span>
+              <span class="chip">전용 ${g.sizes.join("·")}평</span>
+            </div>
+          </div>
+          <div class="price">
+            <b>${won(g.latest.price)}</b>
+            <span>최근 ${g.latest.date.slice(5).replace("-", ".")}</span><br/>
+            <span>${g.low === g.high ? "" : `${won(g.low)} ~ ${won(g.high)}`}</span>
+          </div>
+        </div>
+        <div class="deals">
+          <table>
+            <tr><th>거래일</th><th>전용면적</th><th>층</th><th class="r">가격</th></tr>
+            ${g.deals.map((d) => `<tr><td>${d.date}</td><td>${d.area}㎡ (${pyeong(d.area)}평)</td><td>${d.floor}층</td><td class="r">${won(d.price)}</td></tr>`).join("")}
+          </table>
+        </div>
+      </div>`).join("")}`;
+  $("sort").value = sort;
+  $("sort").onchange = (e) => render(e.target.value);
+  document.querySelectorAll(".apt-head").forEach((h) => h.onclick = () => h.parentElement.classList.toggle("open"));
+}
+</script>
+</body>
+</html>
