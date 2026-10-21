@@ -58,7 +58,8 @@ export default async function handler(req, res) {
         .then((r) => r.documents || []),
       getBuilding(lot).catch((e) => ({ error: e.message })),
       // 주변 아파트 단지 (1km 안, 최대 45곳까지 받아와요)
-      all("search/keyword.json", { x: pos.x, y: pos.y, radius: "1000", sort: "distance", query: "아파트" })
+      // ※ 거리순(distance)으로 하면 카카오가 10곳만 돌려줘서, 정확도순(accuracy)으로 받아서 거리를 따로 봐요
+      all("search/keyword.json", { x: pos.x, y: pos.y, radius: "1000", sort: "accuracy", query: "아파트" })
         .catch(() => null),
     ]);
     // 가장 가까운 중학교 (분류가 '중학교'인 곳만)
@@ -75,15 +76,6 @@ export default async function handler(req, res) {
     const depts = new Set(deptDocs.filter((d) => /백화점$/.test(d.category_name)).map((d) => d.id));
 
     // 주변 아파트 단지 수: '아파트' 분류만, 'OO아파트 101동'·상가·관리사무소 같은 건 빼고, 같은 단지는 한 번만 세요
-    if (req.query.debug === "apts") {
-      const out = {};
-      for (const [k, q, extra] of [["a_dist", "아파트", { sort: "distance" }], ["a_acc", "아파트", { sort: "accuracy" }],
-        ["dong_apt", `${addr.split(" ")[2] || ""} 아파트`, { sort: "distance" }], ["danji", "단지", { sort: "distance" }], ["jugong", "아파트단지", { sort: "distance" }]]) {
-        const r = await call("search/keyword.json", { x: pos.x, y: pos.y, radius: "1000", query: q, size: "15", page: "1", ...extra }).catch((e) => ({ err: e.message }));
-        out[k] = { meta: r.meta, n: r.documents?.length, names: (r.documents || []).map((d) => `${d.place_name}|${d.distance}|${(d.category_name || "").split(" > ").slice(-1)[0]}`) };
-      }
-      return res.status(200).json(out);
-    }
     let apts = null;
     if (aptDocs) {
       const NOT = /(상가|관리|경비|어린이집|유치원|놀이터|정문|후문|주차|노인정|경로당|커뮤니티|피트니스|분양|모델하우스|부동산)/;
