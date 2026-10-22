@@ -1,6 +1,6 @@
 // 앱처럼 설치되게 해주는 서비스 워커예요.
 // 화면 파일은 저장해 두고 인터넷이 끊겨도 열리게 하고, 데이터(/api)는 항상 새로 받아요.
-const CACHE = "apt-finder-v20";
+const CACHE = "apt-finder-v21";
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {

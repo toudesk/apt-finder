@@ -145,6 +145,18 @@
   .row .links { margin-top: 6px; flex-wrap: wrap; gap: 4px; }
   .row .links a { padding: 2px 7px; }
   .sheet .links { flex-wrap: wrap; }
+  .lst { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+  .lcard { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; font-size: 13px; position: relative; }
+  .lcard .lp { font-size: 17px; font-weight: 700; }
+  .lcard .lm { margin-top: 4px; color: var(--text); }
+  .lcard .ld { margin-top: 6px; font-size: 11px; color: #9ca3af; }
+  .lcard .old { color: #b45309; }
+  .lcard .ldel { position: absolute; top: 6px; right: 6px; border: 0; background: none; color: #9ca3af; cursor: pointer; font-size: 16px; }
+  .lhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; color: var(--sub); }
+  .lbtn { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--accent); color: var(--accent); background: #fff; cursor: pointer; text-decoration: none; }
+  .ledit textarea { width: 100%; min-height: 150px; font: inherit; font-size: 13px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+  .ledit table input { padding: 6px; font-size: 13px; }
+  .ledit td { padding: 4px 3px; }
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: #1a1d23; color: #fff;
     padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: .2s; z-index: 60; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -433,6 +445,7 @@ function build(lists) {
   store.set("work", $("work").value);
   openIds.clear();
   renderAll();
+  loadListings();
   const places = loadPlaces().then(() => { renderAll(); loadCommute(); });
   Promise.all([loadComplex(), places]).then(loadNearHH);
 }
@@ -552,7 +565,7 @@ function renderList() {
       <div class="thead cols">
         <div>등급 점수<small>교통·생활·학군</small></div><div class="totcol">종합<small>점수</small></div>
         <div>단지<small>위치 · 평형 · 용적률</small></div>
-        <div class="tr">최근 실거래<small>날짜 · 층 · 범위</small></div><div class="tr">실거래<small>기간 내</small></div><div class="tr">현재 매물<small>지금 올라온</small></div>
+        <div class="tr">최근 실거래<small>날짜 · 층 · 범위</small></div><div class="tr">실거래<small>기간 내</small></div><div class="tr">현재 매물<small>직접 확인한</small></div>
         <div class="tr">준공<small>연차</small></div><div class="tr">세대수</div>
         <div>가까운 역<small>도보 · 노선</small></div>
         <div class="tr">출근 대중교통<small>${works.length ? esc(works.map(short).join(" · ")) : "출근지 없음"}</small></div>
@@ -577,7 +590,7 @@ function renderList() {
     renderAll();
   });
   document.querySelectorAll(".row-main").forEach((h) => h.onclick = (e) => {
-    if (e.target.closest("a, [data-ask], [data-report]")) return;
+    if (e.target.closest("a, button, [data-ask], [data-report]")) return;
     const id = +h.parentElement.dataset.id;
     openIds.has(id) ? openIds.delete(id) : openIds.add(id);
     h.parentElement.classList.toggle("open");
@@ -592,10 +605,149 @@ function trafficWhy(g) {
   const r = s.tRide != null ? ` / 출근 평균 ${avgRide(g)}분 → ${Math.round(s.tRide)}점` : works.length ? " / 출근 시간 계산 전이라 역 도보만 반영" : "";
   return w ? ` (${w}${r})` : "";
 }
-function listingNone(g) {
-  return `<div class="listing-none"><b>정보 없음</b> — 지금 올라온 매물의 수·가격·특징을 제공하는 공개(공식) 데이터가 없어서 표시하지 않아요.
-    <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산에서 매물 보기</a></div>`;
+// ---- 내가 확인한 매물 (네이버 등에서 직접 보고 붙여넣은 것) ----
+let ADMIN = false; try { ADMIN = !!localStorage.getItem("adminpw"); } catch {}
+const lkey = (g) => `${g.gu}|${g.apt}|${g.dong}|${g.jibun}`;
+const DAYMS = 86400000;
+function listingCell(g) {
+  const ls = g.listings || [];
+  if (ls.length) {
+    const ps = ls.map((x) => x.price), lo = Math.min(...ps), hi = Math.max(...ps);
+    return `<b class="num">${ls.length}건</b><span class="sm">${lo === hi ? won(lo) : `${won(lo)}~${won(hi)}`}</span><span class="nodata" title="직접 확인해 붙여넣은 매물이에요">직접 확인</span>`;
+  }
+  return `<span class="nodata" title="현재 매물 수를 제공하는 공개 데이터가 없어요">정보 없음</span><a class="ext" href="${landUrl(g)}" target="_blank" rel="noopener">네이버 확인</a>${ADMIN && !READONLY ? `<a class="ext" href="#" data-ladd="${g.id}">+ 붙여넣기</a>` : ""}`;
 }
+function listingNone(g) {
+  const ls = g.listings || [];
+  const add = ADMIN && !READONLY ? `<a href="#" class="lbtn" data-ladd="${g.id}">매물 붙여넣기</a>` : "";
+  if (!ls.length) return `<div class="listing-none"><b>정보 없음</b> — 지금 올라온 매물의 수·가격·특징을 제공하는 공개(공식) 데이터가 없어서 표시하지 않아요.
+    <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버 부동산에서 매물 보기</a>${add ? `<div style="margin-top:8px">${add} <span class="muted" style="font-size:12px">네이버에서 본 매물 글을 복사해 붙여넣으면 정리돼요</span></div>` : ""}</div>`;
+  const sorted = [...ls].sort((a, b) => a.price - b.price);
+  return `<div class="lhead"><span><b style="color:var(--text)">직접 확인한 매물 ${ls.length}건</b> · 공식 데이터가 아니라 ${READONLY ? "만든 분이" : "내가"} 네이버 등에서 보고 옮겨 적은 매물이에요. 이미 팔렸을 수 있어요.</span>
+      <a href="${landUrl(g)}" target="_blank" rel="noopener">네이버에서 다시 확인</a>${add}</div>
+    <div class="lst">${sorted.map((x) => {
+      const old = Date.now() - (x.addedAt || 0) > 14 * DAYMS;
+      const info = [x.dong ? `${esc(x.dong)}동` : "", x.floor ? `${esc(x.floor)}층` : "", x.dir ? `${esc(x.dir)}향` : ""].filter(Boolean).join(" · ");
+      const area = x.supply ? `공급 ${x.supply}㎡(${pyeong(x.supply)}평)${x.area ? ` / 전용 ${x.area}㎡` : ""}` : x.area ? `전용 ${x.area}㎡` : "";
+      return `<div class="lcard">${ADMIN && !READONLY ? `<button class="ldel" title="지우기" data-ldel="${g.id}:${esc(x.id)}">×</button>` : ""}
+        <div class="lp">${won(x.price)}</div>${info ? `<div>${info}</div>` : ""}${area ? `<div class="muted">${area}</div>` : ""}
+        ${x.memo ? `<div class="lm">${esc(x.memo)}</div>` : `<div class="lm muted">특징 정보 없음</div>`}
+        <div class="ld">${x.checked ? `확인 ${esc(x.checked)} · ` : ""}옮겨 적은 날 ${new Date(x.addedAt).toLocaleDateString("ko-KR")}${old ? ` · <span class="old">2주 넘음, 다시 확인해 주세요</span>` : ""}</div></div>`;
+    }).join("")}</div>`;
+}
+function parseListings(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
+  // "5억 5,000" "5억5000" 은 5억5천, "6억 505동" "6억 5/15층" 의 숫자는 가격이 아님
+  const PRICE = /(\d+)\s*억(?:\s*(\d{1,2},\d{3}|\d{1,4})(?![\d,]|\s*[동층\/]))?/;
+  const isPriceStart = (l) => /^(매매\s*)?\d+\s*억/.test(l);
+  const chunks = []; let cur = [];
+  for (const l of lines) {
+    if (isPriceStart(l) && cur.some((x) => PRICE.test(x))) { chunks.push(cur); cur = []; }
+    cur.push(l);
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks.map(parseOne).filter((x) => x.price);
+
+  function parseOne(ls) {
+    const all = ls.join("\n");
+    const o = { price: null, dong: "", floor: "", dir: "", area: null, supply: null, memo: "", checked: "" };
+    const p = all.match(PRICE);
+    if (p) o.price = (+p[1]) * 10000 + (p[2] ? +p[2].replace(/,/g, "") : 0);
+    const d = all.match(/(?:^|[\s·,(])(\d{1,4})\s*동(?![가-힣])/m); if (d) o.dong = d[1];
+    const f = all.match(/(\d+|저|중|고)\s*\/\s*(\d+)\s*층/); if (f) o.floor = `${f[1]}/${f[2]}`;
+    else { const f2 = all.match(/(\d+|저|중|고)\s*층/); if (f2) o.floor = f2[1]; }
+    const v = all.match(/(남동|남서|북동|북서|남|북|동|서)\s*향/); if (v) o.dir = v[1];
+    const ar = all.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(?:m²|㎡|m2|제곱)/);
+    if (ar) { o.supply = +ar[1]; o.area = +ar[2]; }
+    else {
+      const ex = all.match(/전용\s*(\d+(?:\.\d+)?)/); if (ex) o.area = +ex[1];
+      const su = all.match(/공급\s*(\d+(?:\.\d+)?)/); if (su) o.supply = +su[1];
+    }
+    const c = all.match(/(\d{2,4})\.(\d{1,2})\.(\d{1,2})\.?/);
+    if (c) { const y = c[1].length === 2 ? "20" + c[1] : c[1]; o.checked = `${y}-${c[2].padStart(2, "0")}-${c[3].padStart(2, "0")}`; }
+    // 특징: 각 줄에서 가격·면적·층·향·동·확인일 같은 정보를 지우고 남은 글만 모아요
+    const DROP = /(중개|공인|부동산|네이버|보기$|^사진|집주인|^확인매물|^매물\s*\d)/;
+    const STRIP = [/(^|\s)매매(?=\s|$)/g, /(^|\s)아파트(?=\s|$)/g, /\d+\s*억(\s*(\d{1,2},\d{3}|\d{1,4})(?![\d,]|\s*[동층\/]))?/g, /(공급|전용)\s*\d+(\.\d+)?\s*(m²|㎡|m2)?(\s*\(\d+평\))?/g,
+      /\d+(\.\d+)?\s*\/\s*\d+(\.\d+)?\s*(m²|㎡|m2)/g, /(\d+|저|중|고)\s*\/\s*\d+\s*층/g, /(\d+|저|중|고)\s*층/g, /(남동|남서|북동|북서|남|북|동|서)\s*향/g,
+      /\d+(\.\d+)?\s*(m²|㎡|m2)/g, /\d{2,4}\.\d{1,2}\.\d{1,2}\.?/g, /[가-힣A-Za-z]*\d+단지/g, /\d{1,4}\s*동(?![가-힣])/g];
+    o.memo = ls.filter((l) => !DROP.test(l)).map((l) => {
+      let t = l; for (const r of STRIP) t = t.replace(r, " ");
+      return t.replace(/[·,|/()]+/g, " ").replace(/\s+/g, " ").trim();
+    }).filter((t) => (t.match(/[가-힣A-Za-z]/g) || []).length >= 2 && !/^[가-힣]+(동|구)$/.test(t)).join(" · ").slice(0, 300);
+    return o;
+  }
+}
+
+async function loadListings() {
+  if (!ADMIN || READONLY || !groups.length) return;
+  try {
+    const map = await adminApi("lget", { keys: groups.map(lkey) });
+    for (const g of groups) g.listings = map[lkey(g)] || [];
+    scheduleRender();
+  } catch (e) { if (/비밀번호/.test(e.message)) { ADMIN = false; scheduleRender(); } }
+}
+function openListingEditor(g) {
+  document.querySelectorAll(".modal").forEach((m) => m.remove());
+  const m = document.createElement("div");
+  m.className = "modal";
+  m.innerHTML = `<div class="sheet ledit" role="dialog" aria-modal="true" aria-label="매물 붙여넣기">
+    <button class="x" aria-label="닫기">×</button>
+    <h3>매물 붙여넣기</h3>
+    <p class="meta" style="margin:4px 0 12px">${esc(g.apt)} · ${esc(g.gu)} ${esc(g.dong)} — 네이버 부동산 등에서 매물 글을 복사해 아래에 붙여넣고 '정리하기'를 눌러요. 여러 개를 한꺼번에 붙여넣어도 돼요.</p>
+    <textarea id="lpaste" placeholder="예)\n매매 6억\n아파트 · 59/44m², 13/15층, 남향\n27년7월 세안고 로얄동층\n확인매물 25.10.20"></textarea>
+    <div style="display:flex;gap:8px;margin:8px 0 14px"><button class="lbtn" id="lparse">정리하기</button><button class="lbtn" id="lblank">직접 입력 줄 추가</button></div>
+    <div id="lrows"></div>
+    <p class="err" id="lerr" style="color:#b42318;font-size:13px"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="lbtn" id="lcancel">취소</button><button class="go" id="lsave" style="width:auto;padding:8px 18px">저장</button></div>
+  </div>`;
+  document.body.appendChild(m); document.body.style.overflow = "hidden";
+  const close = () => { m.remove(); document.body.style.overflow = ""; document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".x") || e.target.id === "lcancel") close(); });
+  let rows = [];
+  const F = [["price", "가격(억)", 70], ["dong", "동", 54], ["floor", "층", 64], ["dir", "향", 50], ["area", "전용㎡", 60], ["memo", "특징", 0], ["checked", "확인일", 96]];
+  const draw = () => {
+    m.querySelector("#lrows").innerHTML = rows.length ? `<div style="overflow-x:auto"><table><tr>${F.map(([, n]) => `<th>${n}</th>`).join("")}<th></th></tr>
+      ${rows.map((r, i) => `<tr>${F.map(([k, , w]) => `<td><input data-i="${i}" data-k="${k}" value="${esc(k === "price" ? (r.price ? +(r.price / 10000).toFixed(4) : "") : r[k] ?? "")}" style="${w ? `width:${w}px` : "min-width:180px;width:100%"}" /></td>`).join("")}
+      <td><button class="lbtn" data-rm="${i}">빼기</button></td></tr>`).join("")}</table></div>
+      <p class="muted" style="font-size:12px">가격은 억 단위예요 (5억 5,000만 원 → 5.5). 틀린 칸은 고쳐서 저장하세요.</p>` : "";
+    m.querySelectorAll("#lrows input").forEach((inp) => inp.oninput = () => {
+      const r = rows[+inp.dataset.i], k = inp.dataset.k;
+      r[k] = k === "price" ? Math.round(parseFloat(inp.value) * 10000) || null : k === "area" ? parseFloat(inp.value) || null : inp.value;
+    });
+    m.querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => { rows.splice(+b.dataset.rm, 1); draw(); });
+  };
+  m.querySelector("#lparse").onclick = () => {
+    const got = parseListings(m.querySelector("#lpaste").value);
+    m.querySelector("#lerr").textContent = got.length ? "" : "가격(예: 6억, 5억 5,000)을 찾지 못했어요. 글을 확인하거나 '직접 입력'을 써 주세요.";
+    rows.push(...got); draw();
+  };
+  m.querySelector("#lblank").onclick = () => { rows.push({ price: null, dong: "", floor: "", dir: "", area: null, memo: "", checked: "" }); draw(); };
+  m.querySelector("#lsave").onclick = async () => {
+    const add = rows.filter((r) => r.price).map((r) => ({ ...r, id: Math.random().toString(36).slice(2, 10), addedAt: Date.now() }));
+    if (!add.length) { m.querySelector("#lerr").textContent = "저장할 매물이 없어요. 가격을 넣어 주세요."; return; }
+    const same = (a, b) => a.price === b.price && a.dong === b.dong && a.floor === b.floor;
+    const items = [...(g.listings || []).filter((x) => !add.some((y) => same(x, y))), ...add];
+    try {
+      const d = await adminApi("lset", { key: lkey(g), items });
+      g.listings = d.items; close(); renderAll(); toast(`매물 ${add.length}건을 저장했어요`);
+    } catch (e) { m.querySelector("#lerr").textContent = e.message; }
+  };
+  m.querySelector("#lpaste").focus();
+}
+document.addEventListener("click", async (e) => {
+  const a = e.target.closest("[data-ladd]");
+  if (a) { e.preventDefault(); e.stopPropagation(); const g = groups.find((x) => x.id === +a.dataset.ladd); if (g) openListingEditor(g); return; }
+  const d = e.target.closest("[data-ldel]");
+  if (d) {
+    e.preventDefault(); e.stopPropagation();
+    const [gid, lid] = d.dataset.ldel.split(":");
+    const g = groups.find((x) => x.id === +gid); if (!g || !confirm("이 매물을 지울까요?")) return;
+    try { const r = await adminApi("lset", { key: lkey(g), items: (g.listings || []).filter((x) => x.id !== lid) }); g.listings = r.items; renderAll(); document.querySelectorAll(".modal").forEach((m) => m.remove()); document.body.style.overflow = ""; }
+    catch (err) { alert(err.message); }
+  }
+});
 function gradeAvg(g) {
   const v = ["traffic", "life", "school"].map((k) => g.s?.[k]).filter((x) => x != null);
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
@@ -713,7 +865,7 @@ function card(g) {
         <span class="sm">${g.latest.date.slice(2).replace(/-/g, ".")} · ${g.latest.floor}층 · ${pyeong(g.latest.area)}평</span>
         ${g.low === g.high ? "" : `<span class="sm">${won(g.low)}~${won(g.high)}</span>`}</div>
       <div class="cell c-count tr num">${L("실거래 (기간 내)")}<b>${g.deals.length}건</b></div>
-      <div class="cell c-listing tr">${L("현재 매물")}<span class="nodata" title="현재 매물 수를 제공하는 공개 데이터가 없어요">정보 없음</span><a class="ext" href="${landUrl(g)}" target="_blank" rel="noopener">네이버 확인</a></div>
+      <div class="cell c-listing tr">${L("현재 매물")}${listingCell(g)}</div>
       <div class="cell c-built tr">${L("준공")}<span class="big num" style="font-size:14px">${g.built}</span><span class="sm">${year - g.built + 1}년차</span></div>
       <div class="cell c-hh tr">${L("세대수")}${hh}${g.kapt?.buildings ? `<span class="sm">${g.kapt.buildings}개 동</span>` : ""}</div>
       <div class="cell c-station">${L("가까운 역")}${station}</div>
@@ -1107,7 +1259,7 @@ async function saveReport() {
     for (const [w, c] of Object.entries(g.commutes || {})) if (c && c !== "wait") commutes[w] = c;
     return { id: g.id, gu: g.gu, apt: g.apt, dong: g.dong, jibun: g.jibun, built: g.built, deals: g.deals.slice(0, 40),
       latest: g.latest, low: g.low, high: g.high, sizes: g.sizes, ppp: g.ppp, priceRank: g.priceRank,
-      place, kapt: g.kapt, commutes, nearHH: g.nearHH };
+      place, kapt: g.kapt, commutes, nearHH: g.nearHH, listings: g.listings || [] };
   });
   try {
     const d = await adminApi("save", { id: REQ, snap: { groups: slim, works, weights } });
