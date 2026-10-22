@@ -11,6 +11,7 @@
 <style>
   :root { --bg: #f6f7f9; --card: #fff; --text: #1a1d23; --sub: #6b7280; --line: #e5e7eb; --accent: #2563eb; --soft: #eff4ff; }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text); font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 15px; line-height: 1.55; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 28px 16px 60px; }
   h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 0 0 10px; }
@@ -59,6 +60,9 @@
     <form class="panel" id="f">
       <label>신청 코드 <small>받으신 코드 (예: 2조세울)</small>
         <input id="code" autocomplete="off" required />
+      </label>
+      <label id="mname" hidden>보고서에 표시할 이름 <small>마스터 키로 만들 때만 · 예: 세울 (비우면 '관리자')</small>
+        <input id="rname" autocomplete="off" />
       </label>
       <div class="lbl" style="font-size:13px;color:var(--sub);font-weight:500;margin-bottom:6px">지역 (서울 구, 최대 3곳)</div>
       <div class="chips" id="gus" style="margin-bottom:14px"></div>
@@ -116,6 +120,8 @@ $("gus").onclick = (e) => {
   $("gus").querySelectorAll("button").forEach((b) => b.classList.toggle("on", picked.includes(b.dataset.c)));
 };
 $("code").value = $("fcode").value = store.get("applyCode", "");
+// 관리자로 들어온 적 있는 브라우저에는 '표시할 이름' 칸을 보여줘요
+try { if (localStorage.getItem("adminpw")) $("mname").hidden = false; } catch {}
 
 $("f").onsubmit = async (e) => {
   e.preventDefault();
@@ -125,12 +131,18 @@ $("f").onsubmit = async (e) => {
   try {
     const work = [$("w1").value, $("w2").value].map((x) => x.trim()).filter(Boolean).join(", ");
     const r = await fetch("/api/report?a=apply", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: $("code").value, gus: picked, months: $("months").value, min: $("min").value || 0, max: $("max").value,
+      body: JSON.stringify({ code: $("code").value, name: $("rname").value, gus: picked, months: $("months").value, min: $("min").value || 0, max: $("max").value,
         area: $("area").value, hh: $("hh").value, work }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "신청하지 못했어요.");
-    store.set("applyCode", $("code").value.trim());
+    if (!d.master) store.set("applyCode", $("code").value.trim());
     const link = `${location.origin}/apply?id=${d.id}`;
+    if (d.master) {
+      try { localStorage.setItem("adminpw", $("code").value.trim()); } catch {}
+      $("done").innerHTML = `<div class="ok" style="margin-top:12px"><b>마스터 키로 신청했어요.</b> 횟수 제한 없이 바로 만들 수 있어요.<br>
+        <a href="/?req=${d.id}">지금 바로 만들기 →</a><br><span class="muted">확인 링크: <a href="${link}">${link}</a></span></div>`;
+      $("go").disabled = false; $("go").textContent = "신청하기"; return;
+    }
     $("done").innerHTML = `<div class="ok" style="margin-top:12px"><b>신청됐어요!</b><br>아래 '내 보고서 확인 링크'를 저장해 두세요. 진행 상황을 보고, 완성되면 바로 열 수 있어요.<br><a href="${link}">${link}</a></div>`;
   } catch (err) { $("err").textContent = err.message; }
   $("go").disabled = false; $("go").textContent = "신청하기";
@@ -141,7 +153,7 @@ $("fgo").onclick = async () => {
   const r = await fetch(`/api/report?a=find&code=${encodeURIComponent($("fcode").value.trim())}`);
   const d = await r.json();
   if (!r.ok) { $("flist").innerHTML = `<p class="err">${esc(d.error)}</p>`; return; }
-  store.set("applyCode", $("fcode").value.trim());
+  if (!d.master) store.set("applyCode", $("fcode").value.trim());
   const rule = [d.limit ? `총 ${d.limit}번` : "", d.perDay ? `하루 ${d.perDay}번` : ""].filter(Boolean).join(" · ");
   $("flist").innerHTML = `<p class="muted" style="font-size:13px">${esc(d.name)}님 · ${d.list.length}번 신청${rule ? ` (${rule}까지)` : ""}</p>` +
     (d.list.length ? d.list.map(item).join("") : `<p class="muted">아직 신청한 보고서가 없어요.</p>`);
