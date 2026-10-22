@@ -40,10 +40,12 @@ export default async function handler(req, res) {
   try {
     // ---------- 공개 ----------
     if (a === "apply" && req.method === "POST") {
-      const code = cleanCode(body.code);
-      const c = code && await getJ(`code:${code}`);
+      // 마스터 키(관리자 비밀번호)를 코드로 넣으면 횟수 제한 없이 신청돼요
+      const master = isMaster(body.code);
+      const code = master ? MASTER : cleanCode(body.code);
+      const c = master ? { name: String(body.name || "").trim().slice(0, 20) || "관리자", limit: 0, perDay: 0 } : code && await getJ(`code:${code}`);
       if (!c) return res.status(400).json({ error: "신청 코드를 확인해 주세요." });
-      const mine = await listReqs(redis, getJ, `code:${code}:reqs`);
+      const mine = master ? [] : await listReqs(redis, getJ, `code:${code}:reqs`);
       const today = kstDay();
       if (c.limit && mine.length >= c.limit) return res.status(400).json({ error: `이 코드는 ${c.limit}번까지 신청할 수 있어요. 이미 다 쓰셨어요.` });
       if (c.perDay && mine.filter((r) => kstDay(r.createdAt) === today).length >= c.perDay)
@@ -62,7 +64,7 @@ export default async function handler(req, res) {
       await setJ(`req:${id}`, r);
       await redis("LPUSH", "reqs", id);
       await redis("LPUSH", `code:${code}:reqs`, id);
-      return res.status(200).json({ id });
+      return res.status(200).json({ id, master });
     }
     if (a === "status") {
       if (req.method === "POST") {
@@ -77,6 +79,10 @@ export default async function handler(req, res) {
       return res.status(200).json(publicReq(r, await queuePos(redis, getJ, r)));
     }
     if (a === "find") {
+      if (isMaster(req.query.code)) { // 마스터 키로 찾으면 모든 신청이 보여요
+        const all = await listReqs(redis, getJ, "reqs", 100);
+        return res.status(200).json({ name: "마스터", master: true, limit: 0, perDay: 0, list: all.map((r) => publicReq(r)) });
+      }
       const code = cleanCode(req.query.code);
       const c = code && await getJ(`code:${code}`);
       if (!c) return res.status(404).json({ error: "신청 코드를 확인해 주세요." });
@@ -108,7 +114,7 @@ export default async function handler(req, res) {
     }
     if (a === "code" && req.method === "POST") {
       const code = cleanCode(body.code);
-      if (!code) return res.status(400).json({ error: "코드를 적어 주세요." });
+      if (!code || code === MASTER) return res.status(400).json({ error: "코드를 적어 주세요." });
       await setJ(`code:${code}`, { name: String(body.name || code).slice(0, 20), limit: parseInt(body.limit, 10) || 0, perDay: parseInt(body.perDay, 10) || 0 });
       return res.status(200).json({ ok: true });
     }
@@ -139,6 +145,14 @@ function admin(req) {
   // 화면에서 encodeURIComponent로 보내요 (한글 비밀번호도 되게)
   const pw = encodeURIComponent(process.env.ADMIN_PASSWORD || "");
   const got = String(req.headers["x-admin"] || "");
+  if (!pw || !got) return false;
+  const A = Buffer.from(pw), B = Buffer.from(got);
+  return A.length === B.length && timingSafeEqual(A, B);
+}
+const MASTER = "__master__";
+function isMaster(v) {
+  const pw = process.env.ADMIN_PASSWORD || "";
+  const got = String(v || "").trim();
   if (!pw || !got) return false;
   const A = Buffer.from(pw), B = Buffer.from(got);
   return A.length === B.length && timingSafeEqual(A, B);
