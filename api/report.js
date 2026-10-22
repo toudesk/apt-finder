@@ -14,6 +14,8 @@
 //   POST /api/report?a=delcode {code}
 //   POST /api/report?a=status {id, status}  → 진행 중·거절 표시
 //   POST /api/report?a=save   {id, snap}    → 보고서 저장 + 신청 완료 처리
+//   POST /api/report?a=lget   {keys: [단지키...]}        → 내가 저장한 매물들 {단지키: [매물...]}
+//   POST /api/report?a=lset   {key, items: [매물...]}    → 그 단지 매물 목록 통째로 저장 (빈 목록이면 삭제)
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 
@@ -121,6 +123,28 @@ export default async function handler(req, res) {
     if (a === "delcode" && req.method === "POST") {
       await redis("DEL", `code:${cleanCode(body.code)}`);
       return res.status(200).json({ ok: true });
+    }
+    // ---- 내가 확인한 매물 (네이버 등에서 직접 보고 붙여넣은 것) ----
+    if (a === "lget" && req.method === "POST") {
+      const keys = [].concat(body.keys || []).map((k) => String(k).slice(0, 120)).slice(0, 300);
+      if (!keys.length) return res.status(200).json({});
+      const vals = (await redis("MGET", ...keys.map((k) => `lst:${k}`))) || [];
+      const out = {};
+      keys.forEach((k, i) => { if (vals[i]) { try { out[k] = JSON.parse(vals[i]); } catch {} } });
+      return res.status(200).json(out);
+    }
+    if (a === "lset" && req.method === "POST") {
+      const key = String(body.key || "").slice(0, 120);
+      if (!key) return res.status(400).json({ error: "단지 정보가 없어요." });
+      const s = (v, n) => String(v ?? "").slice(0, n);
+      const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+      const items = [].concat(body.items || []).slice(0, 40).map((x) => ({
+        id: s(x.id, 20) || rid(6), price: num(x.price), dong: s(x.dong, 10), floor: s(x.floor, 12), dir: s(x.dir, 6),
+        area: num(x.area), supply: num(x.supply), memo: s(x.memo, 300), checked: s(x.checked, 12), addedAt: num(x.addedAt) || Date.now(),
+      })).filter((x) => x.price);
+      if (!items.length) await redis("DEL", `lst:${key}`);
+      else await setJ(`lst:${key}`, items, 120 * 86400); // 120일 지나면 자동 삭제
+      return res.status(200).json({ ok: true, items });
     }
     if (a === "save" && req.method === "POST") {
       const r = await getJ(`req:${body.id}`);
