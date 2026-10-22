@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>아파트 후보 보고서 신청</title>
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" href="/icon-192.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --text: #1a1d23; --sub: #6b7280; --line: #e5e7eb; --accent: #2563eb; --soft: #eff4ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 0 0 10px; }
+  .lead { color: var(--sub); margin: 0 0 18px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  .note { background: var(--soft); border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-bottom: 14px; }
+  .note ul { margin: 6px 0 0; padding-left: 18px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--sub); font-weight: 500; margin-bottom: 12px; }
+  label small { font-weight: 400; color: #9ca3af; }
+  input, select { font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--text); width: 100%; }
+  .row2 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: #fff; cursor: pointer; color: var(--text); }
+  .chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.go { width: 100%; font: inherit; font-weight: 700; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; }
+  button.go:disabled { opacity: .6; }
+  .err { color: #b42318; font-size: 14px; margin: 8px 0 0; }
+  .ok { background: #ecfdf3; border: 1px solid #abefc6; border-radius: 12px; padding: 14px; font-size: 14px; }
+  .ok a { color: var(--accent); word-break: break-all; }
+  .item { border-top: 1px solid var(--line); padding: 10px 0; font-size: 14px; display: flex; justify-content: space-between; gap: 10px; }
+  .item:first-child { border-top: 0; }
+  .st { font-size: 12px; padding: 2px 8px; border-radius: 99px; white-space: nowrap; background: #f1f2f4; color: var(--sub); }
+  .st.done { background: #e7f8f1; color: #059669; } .st.making { background: var(--soft); color: var(--accent); } .st.rejected { background: #fdecec; color: #b42318; }
+  .muted { color: var(--sub); } a { color: var(--accent); }
+  footer { font-size: 12px; color: var(--sub); margin-top: 20px; }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="statusView" hidden></div>
+
+  <div id="applyView">
+    <h1>아파트 후보 보고서 신청</h1>
+    <p class="lead">예산과 지역을 넣으면, 그 안에서 살 수 있는 단지를 모아 출근시간·역 거리·주변 시설·실거래가와 등급 평가를 담은 보고서를 만들어 드려요.</p>
+    <div class="note"><b>알아두세요</b>
+      <ul>
+        <li>신청 횟수는 코드마다 정해져 있어요 (아래 '내 신청 찾기'에서 확인).</li>
+        <li>신청하면 '내 보고서 확인 링크'가 나와요. 그 링크에서 진행 상황을 보고, 완성되면 보고서를 열 수 있어요.</li>
+        <li>보고서는 신청 순서대로 확인 후 만들어져요. 완성된 보고서는 30일 동안 열려요.</li>
+        <li>매물·호가는 공개 데이터가 없어 담기지 않아요. 예산은 최근 <b>실거래가</b> 기준으로 골라요.</li>
+      </ul>
+    </div>
+
+    <form class="panel" id="f">
+      <label>신청 코드 <small>받으신 코드 (예: 2조세울)</small>
+        <input id="code" autocomplete="off" required />
+      </label>
+      <div class="lbl" style="font-size:13px;color:var(--sub);font-weight:500;margin-bottom:6px">지역 (서울 구, 최대 3곳)</div>
+      <div class="chips" id="gus" style="margin-bottom:14px"></div>
+      <label>예산 <small>실거래가 기준 · 억 단위</small>
+        <div class="row2"><input id="min" type="number" step="0.1" min="0" placeholder="5" /><span>~</span><input id="max" type="number" step="0.1" min="0" placeholder="6" required /></div>
+      </label>
+      <div class="grid2">
+        <label>실거래 기간
+          <select id="months"><option value="3">최근 3개월</option><option value="6" selected>최근 6개월</option><option value="12">최근 1년</option></select>
+        </label>
+        <label>최소 크기 <small>선택 · 전용면적</small>
+          <select id="area"><option value="0">상관없음</option><option value="39">39㎡ 이상 (16평형대~)</option><option value="49">49㎡ 이상 (20평형대~)</option><option value="59">59㎡ 이상 (24평형대~)</option><option value="84">84㎡ 이상 (32평형대~)</option></select>
+        </label>
+        <label>최소 세대수 <small>선택</small>
+          <select id="hh"><option value="0">상관없음</option><option value="100">100세대 이상</option><option value="300">300세대 이상</option><option value="500">500세대 이상</option><option value="1000">1,000세대 이상</option></select>
+        </label>
+        <label>내 직장 근처 역 <small>선택 · 출근시간 계산</small>
+          <input id="w1" placeholder="예: 강남역" list="st" />
+        </label>
+        <label>배우자 직장 근처 역 <small>선택</small>
+          <input id="w2" placeholder="예: 여의도역" list="st" />
+        </label>
+      </div>
+      <datalist id="st"><option value="강남역"></option><option value="시청역"></option><option value="여의도역"></option><option value="광화문역"></option><option value="삼성역"></option><option value="판교역"></option><option value="구로디지털단지역"></option><option value="마곡나루역"></option></datalist>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">직장 역을 비워두면 강남역·시청역·여의도역 기준으로 계산해요.</p>
+      <button class="go" id="go">신청하기</button>
+      <p class="err" id="err"></p>
+      <div id="done"></div>
+    </form>
+
+    <div class="panel">
+      <h2>내 신청 찾기</h2>
+      <p class="muted" style="margin:0 0 10px;font-size:14px">링크를 잃어버렸어도 신청 코드만 넣으면 내가 신청한 보고서를 다시 볼 수 있어요.</p>
+      <div style="display:flex;gap:8px"><input id="fcode" placeholder="신청 코드" /><button class="go" style="width:auto;padding:0 18px" id="fgo" type="button">찾기</button></div>
+      <div id="flist" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <footer>공개된 공식 데이터(국토교통부 실거래가·공동주택 정보, 카카오맵)를 모아 정리한 참고용 자료예요. 실제 매물·추가 정보는 꼭 직접 확인해 주세요. 받은 링크는 본인만 봐 주세요.</footer>
+</div>
+<script>
+const GU = [["종로구","11110"],["중구","11140"],["용산구","11170"],["성동구","11200"],["광진구","11215"],["동대문구","11230"],["중랑구","11260"],["성북구","11290"],["강북구","11305"],["도봉구","11320"],["노원구","11350"],["은평구","11380"],["서대문구","11410"],["마포구","11440"],["양천구","11470"],["강서구","11500"],["구로구","11530"],["금천구","11545"],["영등포구","11560"],["동작구","11590"],["관악구","11620"],["서초구","11650"],["강남구","11680"],["송파구","11710"],["강동구","11740"]];
+const GU_NAME = Object.fromEntries(GU.map(([n, c]) => [c, n]));
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+const STATUS = { pending: "대기 중", making: "만드는 중", done: "완성", rejected: "보류" };
+const fmtDate = (t) => t ? new Date(t).toLocaleDateString("ko-KR", { month: "long", day: "numeric" }) : "";
+const cond = (r) => `${r.gus.map((g) => GU_NAME[g] || g).join(", ")} · ${r.min}억~${r.max}억${r.area ? ` · ${r.area}㎡ 이상` : ""}${r.hh ? ` · ${r.hh}세대 이상` : ""}`;
+
+let picked = [];
+$("gus").innerHTML = GU.map(([n, c]) => `<button type="button" data-c="${c}">${n}</button>`).join("");
+$("gus").onclick = (e) => {
+  const c = e.target.dataset?.c; if (!c) return;
+  picked = picked.includes(c) ? picked.filter((x) => x !== c) : [...picked, c].slice(-3);
+  $("gus").querySelectorAll("button").forEach((b) => b.classList.toggle("on", picked.includes(b.dataset.c)));
+};
+$("code").value = $("fcode").value = store.get("applyCode", "");
+
+$("f").onsubmit = async (e) => {
+  e.preventDefault();
+  $("err").textContent = ""; $("done").innerHTML = "";
+  if (!picked.length) { $("err").textContent = "지역(구)을 1곳 이상 골라 주세요."; return; }
+  $("go").disabled = true; $("go").textContent = "신청하는 중…";
+  try {
+    const work = [$("w1").value, $("w2").value].map((x) => x.trim()).filter(Boolean).join(", ");
+    const r = await fetch("/api/report?a=apply", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: $("code").value, gus: picked, months: $("months").value, min: $("min").value || 0, max: $("max").value,
+        area: $("area").value, hh: $("hh").value, work }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "신청하지 못했어요.");
+    store.set("applyCode", $("code").value.trim());
+    const link = `${location.origin}/apply?id=${d.id}`;
+    $("done").innerHTML = `<div class="ok" style="margin-top:12px"><b>신청됐어요!</b><br>아래 '내 보고서 확인 링크'를 저장해 두세요. 진행 상황을 보고, 완성되면 바로 열 수 있어요.<br><a href="${link}">${link}</a></div>`;
+  } catch (err) { $("err").textContent = err.message; }
+  $("go").disabled = false; $("go").textContent = "신청하기";
+};
+
+$("fgo").onclick = async () => {
+  $("flist").innerHTML = `<p class="muted">찾는 중…</p>`;
+  const r = await fetch(`/api/report?a=find&code=${encodeURIComponent($("fcode").value.trim())}`);
+  const d = await r.json();
+  if (!r.ok) { $("flist").innerHTML = `<p class="err">${esc(d.error)}</p>`; return; }
+  store.set("applyCode", $("fcode").value.trim());
+  const rule = [d.limit ? `총 ${d.limit}번` : "", d.perDay ? `하루 ${d.perDay}번` : ""].filter(Boolean).join(" · ");
+  $("flist").innerHTML = `<p class="muted" style="font-size:13px">${esc(d.name)}님 · ${d.list.length}번 신청${rule ? ` (${rule}까지)` : ""}</p>` +
+    (d.list.length ? d.list.map(item).join("") : `<p class="muted">아직 신청한 보고서가 없어요.</p>`);
+};
+function item(r) {
+  const open = r.status === "done" && r.reportId ? `<a href="/r/${r.reportId}">보고서 열기</a>` : `<a href="/apply?id=${r.id}">진행 상황</a>`;
+  return `<div class="item"><div><div>${esc(cond(r))}</div><div class="muted" style="font-size:12px">${fmtDate(r.createdAt)} 신청 · ${open}</div></div><span class="st ${r.status}">${STATUS[r.status] || r.status}</span></div>`;
+}
+
+// ---- 진행 상황 화면 (/apply?id=...) ----
+const id = new URLSearchParams(location.search).get("id");
+if (id) {
+  $("applyView").hidden = true; $("statusView").hidden = false;
+  const draw = async () => {
+    const r = await fetch(`/api/report?a=status&id=${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (!r.ok) { $("statusView").innerHTML = `<div class="panel"><p class="err">${esc(d.error)}</p><a href="/apply">신청 화면으로</a></div>`; return; }
+    const msg = d.status === "done"
+      ? `<div class="ok"><b>보고서가 완성됐어요!</b><br><a href="/r/${d.reportId}">보고서 열기 →</a><br><span class="muted">${fmtDate(d.expiresAt)}까지 열려요.</span></div>`
+      : d.status === "making" ? `<p>지금 보고서를 만들고 있어요. 잠시 후 이 화면을 새로고침해 주세요.</p>`
+      : d.status === "rejected" ? `<p>이 신청은 보류됐어요. 만든 분께 문의해 주세요.</p>`
+      : `<p>대기 중이에요${d.queue > 1 ? ` (내 앞에 ${d.queue - 1}건)` : d.queue === 1 ? " (다음 차례)" : ""}. 들어온 순서대로 확인 후 만들어 드려요. 이 링크를 저장해 두세요.</p>`;
+    $("statusView").innerHTML = `<h1>내 보고서</h1><p class="lead">${esc(d.name)}님 · ${fmtDate(d.createdAt)} 신청</p>
+      <div class="panel"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b>${esc(cond(d))}</b><span class="st ${d.status}">${STATUS[d.status]}</span></div>
+      ${d.work ? `<p class="muted" style="margin:0 0 8px;font-size:14px">출근지: ${esc(d.work)}</p>` : ""}${msg}</div>
+      <a href="/apply">새로 신청하기 · 내 신청 찾기</a>`;
+    if (d.status === "pending" || d.status === "making") setTimeout(draw, 30000);
+  };
+  draw();
+}
+</script>
+</body>
+</html>

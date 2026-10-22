@@ -1,3 +1,8 @@
 {
-  "regions": ["icn1"]
+  "regions": ["icn1"],
+  "rewrites": [
+    { "source": "/r/:id", "destination": "/index.html" },
+    { "source": "/apply", "destination": "/apply.html" },
+    { "source": "/admin", "destination": "/admin.html" }
+  ]
 }

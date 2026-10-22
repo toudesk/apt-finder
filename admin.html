@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>보고서 관리</title>
+<link rel="icon" href="/icon-192.png" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --text: #1a1d23; --sub: #6b7280; --line: #e5e7eb; --accent: #2563eb; --soft: #eff4ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 14px; } h2 { font-size: 16px; margin: 0 0 10px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; overflow-x: auto; }
+  input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button.p { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--sub); font-weight: 500; }
+  .st { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: #f1f2f4; color: var(--sub); white-space: nowrap; }
+  .st.done { background: #e7f8f1; color: #059669; } .st.making { background: var(--soft); color: var(--accent); } .st.rejected { background: #fdecec; color: #b42318; }
+  .muted { color: var(--sub); } .err { color: #b42318; } a { color: var(--accent); }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 style="display:flex;justify-content:space-between;align-items:center">보고서 관리 <button id="logout" style="font-size:13px" hidden>로그아웃</button></h1>
+  <div class="panel" id="login">
+    <div class="form"><input id="pw" type="password" placeholder="관리자 비밀번호 (Vercel ADMIN_PASSWORD)" style="min-width:280px" />
+      <button class="p" id="enter">들어가기</button></div>
+    <p class="err" id="lerr"></p>
+  </div>
+  <div id="main" hidden>
+    <div class="panel">
+      <h2>신청 목록</h2>
+      <p class="muted" style="margin-top:0">'만들기'를 누르면 메인 화면이 그 조건으로 검색을 시작해요. 계산이 다 끝나면 화면 위의 '보고서 저장'을 눌러 주세요.</p>
+      <div id="reqs"></div>
+    </div>
+    <div class="panel">
+      <h2>신청 코드</h2>
+      <div class="form" style="margin-bottom:10px">
+        <input id="ccode" placeholder="코드 (예: 2조세울)" />
+        <input id="cname" placeholder="이름 (예: 세울)" style="width:120px" />
+        <label class="muted">총 <input id="climit" type="number" value="3" min="0" style="width:64px" />번</label>
+        <label class="muted">하루 <input id="cday" type="number" value="1" min="0" style="width:64px" />번</label>
+        <button class="p" id="cadd">추가·수정</button>
+      </div>
+      <div class="form" style="margin-bottom:10px">
+        <input id="bulk" placeholder="여러 명 한 번에: 앞글자 2조 + 닉네임을 쉼표로 (예: 봉봉, 이지와, 활동가)" style="flex:1;min-width:280px" />
+        <input id="prefix" value="2조" style="width:70px" title="코드 앞에 붙는 글자" />
+        <button id="badd">한꺼번에 추가</button>
+      </div>
+      <p class="muted" style="margin:0 0 8px;font-size:12px">0번은 제한 없음이에요.</p>
+      <div id="codes"></div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const GU_NAME = {"11110":"종로구","11140":"중구","11170":"용산구","11200":"성동구","11215":"광진구","11230":"동대문구","11260":"중랑구","11290":"성북구","11305":"강북구","11320":"도봉구","11350":"노원구","11380":"은평구","11410":"서대문구","11440":"마포구","11470":"양천구","11500":"강서구","11530":"구로구","11545":"금천구","11560":"영등포구","11590":"동작구","11620":"관악구","11650":"서초구","11680":"강남구","11710":"송파구","11740":"강동구"};
+const STATUS = { pending: "대기 중", making: "만드는 중", done: "완성", rejected: "보류" };
+let pw = "";
+try { pw = localStorage.getItem("adminpw") || ""; } catch {}
+const api = async (a, body, q = "") => {
+  const r = await fetch(`/api/report?a=${a}${q}`, { method: body ? "POST" : "GET",
+    headers: { "x-admin": encodeURIComponent(pw), ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `오류 (${r.status})`);
+  return d;
+};
+$("enter").onclick = async () => { pw = $("pw").value; await load(); };
+$("pw").onkeydown = (e) => { if (e.key === "Enter") $("enter").click(); };
+async function load() {
+  try {
+    const d = await api("list");
+    try { localStorage.setItem("adminpw", pw); } catch {}
+    $("login").hidden = true; $("main").hidden = false; $("logout").hidden = false;
+    $("reqs").innerHTML = d.reqs.length ? `<table><tr><th>신청</th><th>조건</th><th>상태</th><th></th></tr>${d.reqs.map((r) => `
+      <tr><td><b>${esc(r.name)}</b><div class="muted" style="font-size:12px">${new Date(r.createdAt).toLocaleString("ko-KR")}</div></td>
+      <td>${esc(r.gus.map((g) => GU_NAME[g] || g).join(", "))} · ${r.min}~${r.max}억 · ${r.months}개월${r.area ? ` · ${r.area}㎡↑` : ""}${r.hh ? ` · ${r.hh}세대↑` : ""}
+        <div class="muted" style="font-size:12px">출근지: ${esc(r.work || "강남역, 시청역, 여의도역 (기본)")}</div></td>
+      <td><span class="st ${r.status}">${STATUS[r.status] || r.status}</span>${r.reportId ? `<div style="font-size:12px;margin-top:4px"><a href="/r/${r.reportId}" target="_blank">보고서</a></div>` : ""}</td>
+      <td><div class="acts"><a href="/?req=${r.id}" target="_blank"><button class="p">${r.status === "done" ? "다시 만들기" : "만들기"}</button></a>
+        ${r.status !== "rejected" ? `<button data-st="rejected" data-id="${r.id}">보류</button>` : `<button data-st="pending" data-id="${r.id}">대기로</button>`}</div></td></tr>`).join("")}</table>`
+      : `<p class="muted">아직 신청이 없어요.</p>`;
+    $("codes").innerHTML = d.codes.length ? `<table><tr><th>코드</th><th>이름</th><th>사용</th><th>규칙</th><th></th></tr>${d.codes.sort((a, b) => a.code.localeCompare(b.code)).map((c) => `
+      <tr><td>${esc(c.code)}</td><td>${esc(c.name)}</td><td>${c.used}번</td><td class="muted">총 ${c.limit || "∞"} · 하루 ${c.perDay || "∞"}</td>
+      <td><button data-del="${esc(c.code)}">삭제</button></td></tr>`).join("")}</table>` : `<p class="muted">코드가 없어요. 위에서 추가해 주세요.</p>`;
+    document.querySelectorAll("[data-st]").forEach((b) => b.onclick = async () => { await api("status", { id: b.dataset.id, status: b.dataset.st }); load(); });
+    document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => { if (confirm(`${b.dataset.del} 코드를 지울까요?`)) { await api("delcode", { code: b.dataset.del }); load(); } });
+  } catch (e) {
+    $("login").hidden = false; $("main").hidden = true; $("lerr").textContent = e.message;
+  }
+}
+$("cadd").onclick = async () => {
+  await api("code", { code: $("ccode").value, name: $("cname").value || $("ccode").value, limit: $("climit").value, perDay: $("cday").value });
+  $("ccode").value = $("cname").value = ""; load();
+};
+$("badd").onclick = async () => {
+  const names = $("bulk").value.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+  for (const n of names) await api("code", { code: $("prefix").value + n, name: n, limit: $("climit").value, perDay: $("cday").value });
+  $("bulk").value = ""; load();
+};
+$("logout").onclick = () => { try { localStorage.removeItem("adminpw"); } catch {} location.reload(); };
+if (pw) load();
+</script>
+</body>
+</html>

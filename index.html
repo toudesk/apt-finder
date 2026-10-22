@@ -20,6 +20,7 @@
     --gB: #b45309; --gB-bg: #fdf3e2; --gC: #6b7280; --gC-bg: #f1f2f4;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
   .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 60px; }
@@ -110,7 +111,8 @@
   .fchip a { color: var(--warn); margin-left: 6px; }
   .listhead .hint { font-size: 13px; color: var(--sub); }
   .listhead select { width: auto; margin-left: auto; }
-  .tbl { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .tbl { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow-x: auto; }
+  .tbl > .thead, .tbl > .row { min-width: 1380px; } /* 화면이 좁으면 표를 옆으로 밀어서 봐요 */
   .cols { display: grid; align-items: start; column-gap: 12px;
     grid-template-columns: 128px 64px minmax(160px, 1.6fr) 110px 48px 72px 64px 64px 104px 104px 84px 118px minmax(108px, 1fr); }
   .thead { position: sticky; top: 0; z-index: 2; background: #fafbfc; border-bottom: 1px solid var(--line);
@@ -155,6 +157,15 @@
   .row .deals { display: none; border-top: 1px dashed var(--line); padding: 6px 18px 14px; background: #fcfcfd; }
   .row.open .deals { display: block; }
   .muted { color: var(--sub); }
+  #adminbar { position: sticky; top: 0; z-index: 30; background: #1a1d23; color: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 14px; }
+  #adminbar .prog { display: flex; gap: 12px; flex-wrap: wrap; color: #cbd5e1; font-size: 13px; }
+  #adminbar .prog b { color: #fff; }
+  #adminbar button { font: inherit; font-weight: 700; padding: 8px 14px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; cursor: pointer; margin-left: auto; }
+  #adminbar button:disabled { opacity: .5; cursor: default; }
+  #adminbar a { color: #93c5fd; }
+  .rshare { font-size: 13px; color: var(--sub); margin: 0 0 6px; }
+  .rshare b { color: var(--text); }
   .nodata { color: #9ca3af; font-size: 12px; }
   .ext { font-size: 11px; color: var(--accent); display: block; margin-top: 2px; }
   .deals h5 { margin: 12px 0 4px; font-size: 13px; }
@@ -181,6 +192,7 @@
 
   @media (max-width: 1100px) {
     .thead { display: none; }
+    .tbl > .row { min-width: 0; }
     .cols { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; }
     .c-grade { grid-column: 1 / span 2; } .c-total { grid-column: 3; } .c-name { grid-column: 1 / -1; grid-row: 2; }
     .c-price { grid-column: 4; grid-row: 1; }
@@ -202,8 +214,12 @@
 </head>
 <body>
 <div class="wrap">
+  <div id="adminbar" hidden></div>
+  <div id="rhead" hidden></div>
+  <div id="mainhead">
   <h1>내 아파트 찾기</h1>
   <p class="lead">구와 예산을 고르면 최근 실거래된 아파트를 단지별로 모아 점수와 등급을 매겨 드려요.</p>
+  </div>
 
   <form class="panel filters" id="f">
     <div class="lbl gus">구 (최대 3개)
@@ -429,6 +445,7 @@ const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeo
 function renderAll() {
   for (const g of groups) g.s = scoreOf(g);
   renderSummary(); renderTools(); renderList();
+  if (REQ) adminProgress();
 }
 
 function renderSummary() {
@@ -655,6 +672,7 @@ function card(g) {
   }).join("")}${(() => {
     const avg = avgRide(g);
     if (avg != null) return `<div class="avg"><span>평균</span><b class="num">${avg}분</b></div>`;
+    if (READONLY) return "";
     if (works.some((w) => g.commutes?.[w] === undefined)) return `<div><a href="#" class="ask" data-ask="${g.id}">계산하기</a></div>`;
     return "";
   })()}</div>`;
@@ -970,7 +988,7 @@ function avgRide(g) {
 const ride = (g) => avgRide(g) ?? 9999;
 // 카카오 대중교통 무료 조회량이 넉넉하지 않아서(하루 1,000번), 결과를 이 브라우저에 30일 기억해 두고
 // 처음에는 종합 점수 상위 AUTO_N개 단지만 자동으로 계산해요. 나머지는 '계산하기'를 누르면 해요.
-const AUTO_N = 20;
+const AUTO_N = new URLSearchParams(location.search).get("req") ? 80 : 20; // 보고서 만들 땐 전부 계산
 const DAY = 86400000;
 let quotaHit = false;
 const cKey = (g, w) => `c:${addrOf(g)}|${g.apt}|${w}`;
@@ -1004,12 +1022,101 @@ function loadCommute(byTraffic) {
   return runQueue(jobs, 3, async ({ g, w }) => { await fetchCommute(g, w); if (quotaHit) return "stop"; });
 }
 document.addEventListener("click", async (e) => {
-  const a = e.target.closest("[data-ask]"); if (!a) return;
+  const a = e.target.closest("[data-ask]"); if (!a || READONLY) return;
   e.preventDefault(); e.stopPropagation();
   const g = groups.find((x) => x.id === +a.dataset.ask);
   if (!g) return;
   for (const w of works) if (g.commutes?.[w] === undefined || g.commutes[w].quota) { delete (g.commutes || {})[w]; await fetchCommute(g, w); scheduleRender(); }
 });
+
+// ---- 고정 보고서 (/r/보고서번호) 와 보고서 만들기 (?req=신청번호) ----
+const OWNER = "준"; // 보고서에 표시되는 제작자 이름
+const RID = (location.pathname.match(/^\/r\/([\w-]+)/) || [])[1] || null;
+const REQ = new URLSearchParams(location.search).get("req");
+var READONLY = !!RID;
+const fmtDay = (t) => new Date(t).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, "-").replace(".", "");
+const condText = (c) => `${c.gus.map((g) => GU_NAME[g] || g).join(", ")} · ${c.min}억~${c.max}억${c.area ? ` · 전용 ${c.area}㎡ 이상` : ""}${c.hh ? ` · ${(+c.hh).toLocaleString()}세대 이상` : ""}`;
+
+if (RID) (async () => {
+  $("f").hidden = true; $("mainhead").hidden = true;
+  $("result").innerHTML = `<p class="empty">보고서를 불러오는 중…</p>`;
+  const r = await fetch(`/api/report?a=get&rid=${encodeURIComponent(RID)}`);
+  const snap = await r.json().catch(() => ({}));
+  if (!r.ok) { $("result").innerHTML = `<p class="empty">${esc(snap.error || "보고서를 열지 못했어요.")}</p>`; return; }
+  const made = new Date(snap.createdAt);
+  $("rhead").hidden = false;
+  $("rhead").innerHTML = `<p class="rshare"><b>${esc(snap.name)}님께 공유된 보고서</b> · ${fmtDay(snap.expiresAt)}까지 · 제작자 : ${esc(OWNER)}</p>
+    <h1>${esc(snap.name)}님을 위한 아파트 후보 분석</h1>
+    <p class="lead">${esc(condText(snap.cond))} 조건으로 ${fmtDay(snap.createdAt)} ${made.toTimeString().slice(0, 5)} 기준 정리한 결과예요.
+    단지 줄을 누르면 최근 실거래가, '보고서'를 누르면 단지별 분석이 열려요. 이 결과는 만든 날 기준으로 고정돼 있어요.</p>`;
+  document.title = `${snap.name}님 아파트 후보 보고서`;
+  works = snap.works || []; workPlace = works.join(", ");
+  weights = { ...W0, ...(snap.weights || {}) };
+  $("hh").value = "0";
+  groups = snap.groups || [];
+  renderAll();
+})();
+
+async function adminApi(a, body, q = "") {
+  let pw = ""; try { pw = localStorage.getItem("adminpw") || ""; } catch {}
+  const r = await fetch(`/api/report?a=${a}${q}`, { method: body ? "POST" : "GET",
+    headers: { "x-admin": encodeURIComponent(pw), ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `오류 (${r.status})`);
+  return d;
+}
+let reqInfo = null, savedRid = null;
+if (REQ) (async () => {
+  $("adminbar").hidden = false;
+  $("adminbar").innerHTML = `신청 정보를 불러오는 중…`;
+  try { reqInfo = await adminApi("req", null, `&id=${encodeURIComponent(REQ)}`); }
+  catch (e) { $("adminbar").innerHTML = `${esc(e.message)} · <a href="/admin">관리 화면에서 비밀번호를 먼저 넣어 주세요</a>`; return; }
+  picked = reqInfo.gus.slice(0, 3); drawGus();
+  $("months").value = String(reqInfo.months || 6);
+  $("min").value = reqInfo.min; $("max").value = reqInfo.max;
+  $("area").value = String(reqInfo.area || 0); $("hh").value = String(reqInfo.hh || 0);
+  $("work").value = reqInfo.work || "강남역, 시청역, 여의도역";
+  adminApi("status", { id: REQ, status: "making" }).catch(() => {});
+  $("adminbar").innerHTML = `<span><b>${esc(reqInfo.name)}</b>님 보고서 만드는 중</span><span class="prog" id="aprog"></span><button id="asave" disabled>보고서 저장</button>`;
+  $("asave").onclick = saveReport;
+  $("f").requestSubmit();
+})();
+
+function adminProgress() {
+  const el = $("aprog"); if (!el || !groups.length) return;
+  const n = groups.length;
+  const place = groups.filter((g) => g.place !== undefined).length;
+  const hh = groups.filter((g) => g.kapt && (g.kapt.households !== undefined || g.kapt.found === false || g.kapt.error)).length;
+  const near = groups.filter((g) => g.place !== undefined && (!g.place?.apts?.list || g.nearHH?.done)).length;
+  const rideAll = works.length ? groups.filter((g) => works.every((w) => g.commutes?.[w] && g.commutes[w] !== "wait")).length : n;
+  const done = place === n && hh === n && near === n && rideAll === n;
+  el.innerHTML = `단지 <b>${n}</b> · 주변 정보 <b>${place}/${n}</b> · 세대수 <b>${hh}/${n}</b> · 1km 세대수 <b>${near}/${n}</b> · 출근 <b>${rideAll}/${n}</b>${quotaHit ? " · <b style='color:#fca5a5'>출근 조회량 초과</b>" : ""}`;
+  const btn = $("asave");
+  if (btn && !savedRid) { btn.disabled = place < n; btn.textContent = done ? "보고서 저장" : "지금 상태로 저장"; }
+}
+
+async function saveReport() {
+  const btn = $("asave"); btn.disabled = true; btn.textContent = "저장하는 중…";
+  const minHH = +$("hh").value;
+  const hhOf = (g) => g.kapt?.households ?? (g.kapt?.found === false ? 0 : null);
+  const keep = groups.filter((g) => !minHH || hhOf(g) == null || hhOf(g) >= minHH);
+  const slim = keep.map((g) => {
+    const place = g.place ? { ...g.place } : g.place;
+    if (place?.apts) place.apts = { ...place.apts, list: undefined };
+    const commutes = {};
+    for (const [w, c] of Object.entries(g.commutes || {})) if (c && c !== "wait") commutes[w] = c;
+    return { id: g.id, gu: g.gu, apt: g.apt, dong: g.dong, jibun: g.jibun, built: g.built, deals: g.deals.slice(0, 40),
+      latest: g.latest, low: g.low, high: g.high, sizes: g.sizes, ppp: g.ppp, priceRank: g.priceRank,
+      place, kapt: g.kapt, commutes, nearHH: g.nearHH };
+  });
+  try {
+    const d = await adminApi("save", { id: REQ, snap: { groups: slim, works, weights } });
+    savedRid = d.reportId;
+    const link = `${location.origin}/r/${d.reportId}`;
+    $("adminbar").innerHTML = `<span>저장했어요! 보고서: <a href="${link}" target="_blank">${link}</a></span>
+      <span class="prog">신청한 분의 '내 보고서 확인 링크'에도 바로 나타나요.</span><a href="/admin" style="margin-left:auto">관리 화면으로</a>`;
+  } catch (e) { btn.disabled = false; btn.textContent = "다시 저장"; alert(e.message); }
+}
 
 // ---- 앱처럼 설치 (서비스 워커 등록) ----
 if ("serviceWorker" in navigator) {
